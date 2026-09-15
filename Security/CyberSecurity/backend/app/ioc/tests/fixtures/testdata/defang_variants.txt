@@ -1,0 +1,10 @@
+# SYNTHETIC TEST DATA ONLY — defang variant coverage for extractor tests.
+# Each line must yield the refanged IOC shown in brackets.
+hxxp://bad-one[.]example[.]com/payment [http://bad-one.example.com/payment]
+hxps://bad-two(.)example[dot]net/a [https://bad-two.example.net/a]
+http[:]//bad-three[.]example[.]com/x [http://bad-three.example.com/x]
+user[@]evil-example[.]tk [user@evil-example.tk]
+admin[at]evil-example[.]tk [admin@evil-example.tk]
+198[.]51[.]100[.]23 [198.51.100.23]
+contact us at support [@] acme [.] example for help [support@acme.example]
+plain https://files.evil-example.tk/invoice.exe stays as-is

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/contracts/ioc.schema.json",
+  "title": "IOC Record Contract (frozen field list — do not add/remove fields without migration)",
+  "description": "Frozen contract for one IOC row. Any field change requires a contract version bump + db migration + test update.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenant_id",
+    "evidence_id",
+    "type",
+    "value",
+    "value_normalized",
+    "dedupe_key",
+    "risk_score",
+    "risk_level",
+    "mitre_ids",
+    "fallback_used"
+  ],
+  "properties": {
+    "tenant_id": { "type": "string", "format": "uuid" },
+    "evidence_id": { "type": "string", "format": "uuid" },
+    "type": { "type": "string", "enum": ["ip", "domain", "url", "email", "md5", "sha1", "sha256", "sha512"] },
+    "value": { "type": ["string", "null"], "description": "Raw observed value; nullable only pre-normalization, never persisted null" },
+    "value_normalized": { "type": "string", "minLength": 1 },
+    "raw_found": { "type": ["string", "null"], "description": "Nullable raw snippet (null-text allowed)" },
+    "context_snippet": { "type": ["string", "null"], "description": "Nullable context window (null-text allowed)" },
+    "description": { "type": ["string", "null"], "description": "Nullable analyst note (null-text allowed)" },
+    "raw_text": { "type": ["string", "null"], "description": "Nullable source text (null-text allowed)" },
+    "dedupe_key": { "type": "string", "minLength": 1, "description": "sha256(tenant|type|normalized-value), unique per tenant" },
+    "risk_score": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "risk_level": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+    "confidence": { "type": ["number", "null"], "minimum": 0.0, "maximum": 1.0 },
+    "mitre_ids": { "type": "array", "items": { "type": "string", "pattern": "^T[0-9]{4}(\\.[0-9]{3})?$" } },
+    "tags": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "source": { "type": ["string", "null"], "enum": ["syslog", "auth_log", "firewall", "pcap_text", "email_header", "file_text", "generic", null] },
+    "status": { "type": "string", "enum": ["new", "triaged", "benign", "malicious"], "default": "new" },
+    "fallback_used": { "type": "boolean", "description": "True when regex fallback / empty-input path was taken" },
+    "first_seen": { "type": ["string", "null"], "format": "date-time" },
+    "last_seen": { "type": ["string", "null"], "format": "date-time" }
+  },
+  "x-frozen-fields": [
+    "tenant_id", "evidence_id", "type", "value", "value_normalized",
+    "raw_found", "context_snippet", "description", "raw_text",
+    "dedupe_key", "risk_score", "risk_level", "confidence",
+    "mitre_ids", "tags", "source", "status", "fallback_used",
+    "first_seen", "last_seen"
+  ]
+}

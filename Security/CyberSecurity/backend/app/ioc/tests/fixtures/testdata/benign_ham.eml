@@ -1,0 +1,15 @@
+# SYNTHETIC TEST DATA ONLY — legitimate mail that naive regexes misfire on.
+# Tests: precision / false-positive rate. NOTHING here may score HIGH/CRITICAL.
+From: "Acme Store" <orders@acme.example>
+To: customer@acme.example
+Subject: Your password reset + shipping update for service account
+
+Hi,
+
+Reset your password here: https://acme.example/account/reset?token=abc123
+Your firstservice.com order ships Tuesday. Track at https://acme.example/track/991.
+Questions? Contact support@acme.example or visit https://acme.example/help.
+Note: uberflip.com integration is enabled for analytics.
+
+Thanks,
+Acme Store

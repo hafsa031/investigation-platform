@@ -1,0 +1,7 @@
+# SYNTHETIC FIXTURE ONLY — fake hashes for validator tests, not real malware.
+# Valid SHA256 (sha256("abc"), synthetic test vector):
+ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad
+# Valid MD5 (md5("hello"), synthetic test vector):
+5d41402abc4b2a76b9719d911017c592
+# Invalid: 48 hex chars (no standard hash length, must be rejected):
+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

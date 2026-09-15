@@ -1,0 +1,10 @@
+{
+  "alert_id": "SYNTHETIC-2201",
+  "title": "Synthetic brute-force alert (safe test data)",
+  "source_type": "auth_log",
+  "attacker_ip": "198.51.100.23",
+  "target_user": "root",
+  "failed_attempts": 14,
+  "reference_url": "http://acme-portal-secure.net/login",
+  "note": "All IPs/domains are RFC5737 / example.* documentation values."
+}

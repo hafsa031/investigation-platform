@@ -1,0 +1,9 @@
+# SYNTHETIC sensor config (safe test data — documentation addresses only)
+sensors:
+  - name: web-01
+    syslog: 203.0.113.10:514
+    admin_contact: admin@acme.example
+watchlist:
+  - 198.51.100.23
+  - files.evil-example.tk
+reference: https://acme.example/docs/runbook

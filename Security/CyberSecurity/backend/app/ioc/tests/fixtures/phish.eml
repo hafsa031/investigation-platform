@@ -1,0 +1,21 @@
+From: "Acme IT Support" <support@acme.example>
+Reply-To: attacker@evil-example.tk
+Return-Path: <bounce@evil-example.tk>
+To: victim@example.com
+Subject: =?UTF-8?Q?Urgent:_verify_your_Acme_account?=
+Date: Fri, 10 Jan 2025 09:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+X-Original-From-Spoof-Note: SYNTHETIC FIXTURE ONLY — spoofed From for parser tests.
+
+Hello,
+
+We noticed unusual sign-in activity on your Acme account. Please verify
+your identity immediately at our secure portal:
+
+  hxxp://acme-portal-secure[.]net/login?session=abc123
+
+This link expires in 24 hours. Do not share your password with anyone.
+
+Thank you,
+Acme IT Support (SYNTHETIC — no real company, no real link)
