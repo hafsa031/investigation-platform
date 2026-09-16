@@ -1,0 +1,9 @@
+# SYNTHETIC TEST DATA ONLY — adversarial noise. NONE of these may become IOCs,
+# except version-adjacent strings must never score above LOW.
+Chrome 124.0.6367.60 updated build 6.8pl7 on host localhost
+Server at 127.0.0.1:8080 and 10.0.0.5 returned version 1.2.3.4
+Commit 550e8400-e29b-41d4-a716-446655440000 deployed to w3.org mirror
+Contact admin@example.com for the example.com demo (benign, capped LOW)
+Empty SHA256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 ignore
+999.999.999.999 is not an IP. Neither is 1.2.3.4.5.
+.NET Framework 4.5 release notes mention System32\foo.dll and version.dll

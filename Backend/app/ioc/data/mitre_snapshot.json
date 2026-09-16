@@ -1,0 +1,29 @@
+{
+  "version": "v19.2-2025-10-24",
+  "techniques": [
+    {
+      "id": "T1566.002",
+      "tactic": "Initial Access",
+      "name": "Phishing: Spearphishing Link",
+      "description": "phishing"
+    },
+    {
+      "id": "T1110",
+      "tactic": "Credential Access",
+      "name": "Brute Force",
+      "description": "bruteforce"
+    },
+    {
+      "id": "T1204",
+      "tactic": "Execution",
+      "name": "User Execution",
+      "description": "user-exec"
+    },
+    {
+      "id": "T1071.001",
+      "tactic": "Command and Control",
+      "name": "Application Layer Protocol: Web Protocols",
+      "description": "C2"
+    }
+  ]
+}

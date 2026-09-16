@@ -1,0 +1,6 @@
+# SYNTHETIC — firewall CSV export. Expect: 198.51.100.23 + URLs extracted from cells.
+timestamp,src_ip,dst_ip,url,action
+2026-10-12T09:00:01Z,10.0.4.21,203.0.113.55,http://203.0.113.55/beacon?id=1,ALLOW
+2026-10-12T09:01:01Z,10.0.4.21,203.0.113.55,http://203.0.113.55/beacon?id=2,ALLOW
+2026-10-12T09:02:01Z,198.51.100.23,10.0.4.21,,DENY
+2026-10-12T09:03:01Z,10.0.4.21,93.184.216.34,https://cdn.example/app.js,ALLOW

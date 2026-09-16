@@ -1,0 +1,38 @@
+{
+  "private_cidrs": [
+    "10.0.0.0/8",
+    "172.16.0.0/12",
+    "192.168.0.0/16",
+    "127.0.0.0/8",
+    "169.254.0.0/16",
+    "::1/128",
+    "fc00::/7",
+    "fe80::/10"
+  ],
+  "loopback": ["127.0.0.1", "::1"],
+  "benign_domains": [
+    "localhost",
+    "example.com",
+    "example.net",
+    "microsoft.com",
+    "w3.org"
+  ],
+  "phishing_keywords": [
+    "login",
+    "verify",
+    "secure",
+    "paypal",
+    "invoice",
+    "suspended",
+    "urgent",
+    "password"
+  ],
+  "abused_tlds": [".tk", ".top", ".xyz", ".click", ".zip", ".mov"],
+  "empty_hashes": [
+    "d41d8cd98f00b204e9800998ecf8427e",
+    "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "cf83e1357eefb8bdf1542850ddba8fce4aa0f4e2a69291e79d64f6365e4a3f7af"
+  ],
+  "_note": "private_cidrs/loopback are infrastructure, never emitted as IOCs; benign_domains are allowlisted only"
+}

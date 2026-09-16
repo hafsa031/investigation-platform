@@ -1,33 +1,82 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+} from "react";
+import { useParams } from "react-router-dom";
 
-import type { Case, Evidence } from "../types";
+import type {
+  Case,
+  Evidence,
+} from "../types";
+
 import {
   getCases,
   uploadEvidence,
   getAnalysisStatus,
+  analyzeEvidence,
   type AnalysisStatusResponse,
+  type IOCAnalyzeResponse,
 } from "../services/api";
 
 import Loading from "../components/Loading";
 import ErrorMessage from "../components/ErrorMessage";
 
+const TEXT_FILE_EXTENSIONS = [
+  "txt",
+  "log",
+  "eml",
+  "csv",
+  "json",
+  "md",
+  "xml",
+  "yaml",
+  "yml",
+  "html",
+  "htm",
+  "conf",
+  "cfg",
+  "ini",
+];
+
 const CaseDetails = () => {
   const { caseId } = useParams();
-  const navigate = useNavigate();
 
-  const [selectedCase, setSelectedCase] = useState<Case | null>(null);
-  const [evidence, setEvidence] = useState<Evidence[]>([]);
+  const [selectedCase, setSelectedCase] =
+    useState<Case | null>(null);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [evidence, setEvidence] =
+    useState<Evidence[]>([]);
 
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
-  const [uploadError, setUploadError] = useState("");
+  const [selectedFile, setSelectedFile] =
+    useState<File | null>(null);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [uploading, setUploading] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const [uploadError, setUploadError] =
+    useState("");
 
   const [analysisStatus, setAnalysisStatus] =
-    useState<AnalysisStatusResponse | null>(null);
+    useState<AnalysisStatusResponse | null>(
+      null
+    );
+
+  const [iocAnalysis, setIocAnalysis] =
+    useState<IOCAnalyzeResponse | null>(
+      null
+    );
+
+  const [analyzingIOC, setAnalyzingIOC] =
+    useState(false);
+
+  const [iocError, setIocError] =
+    useState("");
 
   const fetchCase = async () => {
     try {
@@ -37,7 +86,8 @@ const CaseDetails = () => {
       const cases = await getCases();
 
       const foundCase = cases.find(
-        (item) => String(item.id) === String(caseId)
+        (item) =>
+          String(item.id) === String(caseId)
       );
 
       if (!foundCase) {
@@ -49,19 +99,25 @@ const CaseDetails = () => {
         id: String(foundCase.id),
         title: foundCase.title,
         description:
-          foundCase.description || "No description provided.",
+          foundCase.description ||
+          "No description provided.",
         status:
           foundCase.status === "Active"
             ? "Open"
             : foundCase.status === "Closed"
               ? "Closed"
               : "In Progress",
-        created_at: new Date().toISOString().split("T")[0],
+        created_at:
+          new Date()
+            .toISOString()
+            .split("T")[0],
         evidence_count: 0,
       });
     } catch (err) {
       console.error(err);
-      setError("Unable to load case details.");
+      setError(
+        "Unable to load case details."
+      );
     } finally {
       setLoading(false);
     }
@@ -71,9 +127,40 @@ const CaseDetails = () => {
     fetchCase();
   }, [caseId]);
 
+  const handleFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file =
+      event.target.files?.[0] || null;
+
+    setSelectedFile(file);
+    setUploadError("");
+    setIocError("");
+    setIocAnalysis(null);
+  };
+
+  const isTextFile = (
+    file: File
+  ): boolean => {
+    const extension =
+      file.name
+        .split(".")
+        .pop()
+        ?.toLowerCase() || "";
+
+    return (
+      TEXT_FILE_EXTENSIONS.includes(
+        extension
+      ) ||
+      file.type.startsWith("text/")
+    );
+  };
+
   const handleUpload = async () => {
     if (!selectedFile || !caseId) {
-      setUploadError("Please select a file first.");
+      setUploadError(
+        "Please select a file first."
+      );
       return;
     }
 
@@ -81,26 +168,40 @@ const CaseDetails = () => {
       setUploading(true);
       setUploadError("");
       setAnalysisStatus(null);
+      setIocAnalysis(null);
+      setIocError("");
 
-      const response = await uploadEvidence(
-        String(caseId),
-        selectedFile
-      );
+      const fileForAnalysis =
+        selectedFile;
+
+      const response =
+        await uploadEvidence(
+          String(caseId),
+          selectedFile
+        );
 
       const newEvidence: Evidence = {
-        id: String(response.evidence_id),
-        filename: response.filename,
+        id: String(
+          response.evidence_id
+        ),
+        filename:
+          response.filename,
         file_type:
-          selectedFile.name.split(".").pop()?.toUpperCase() ||
+          selectedFile.name
+            .split(".")
+            .pop()
+            ?.toUpperCase() ||
           "FILE",
         sha256: "Processing...",
         status:
-          response.status === "processed"
+          response.status ===
+          "processed"
             ? "Processed"
             : "Processing",
-        uploaded_at: new Date()
-          .toISOString()
-          .split("T")[0],
+        uploaded_at:
+          new Date()
+            .toISOString()
+            .split("T")[0],
       };
 
       setEvidence((current) => [
@@ -110,19 +211,25 @@ const CaseDetails = () => {
 
       setSelectedFile(null);
 
-      const fileInput = document.getElementById(
-        "evidence-file"
-      ) as HTMLInputElement | null;
+      const fileInput =
+        document.getElementById(
+          "evidence-file"
+        ) as HTMLInputElement | null;
 
       if (fileInput) {
         fileInput.value = "";
       }
 
-      // Check the analysis status after upload.
+      /*
+       * Retrieve the backend analysis status.
+       */
       try {
-        const status = await getAnalysisStatus(
-          String(response.evidence_id)
-        );
+        const status =
+          await getAnalysisStatus(
+            String(
+              response.evidence_id
+            )
+          );
 
         setAnalysisStatus(status);
       } catch (statusError) {
@@ -130,6 +237,78 @@ const CaseDetails = () => {
           "Unable to retrieve analysis status:",
           statusError
         );
+      }
+
+      /*
+       * IOC analysis is currently performed
+       * directly on text-readable evidence.
+       *
+       * Binary forensic evidence should be
+       * processed by the backend forensic
+       * pipeline instead of calling File.text()
+       * in the browser.
+       */
+      if (!isTextFile(fileForAnalysis)) {
+        setIocError(
+          "IOC analysis is available for text-readable evidence only."
+        );
+        return;
+      }
+
+      try {
+        setAnalyzingIOC(true);
+        setIocError("");
+
+        const text =
+          await fileForAnalysis.text();
+
+        if (!text.trim()) {
+          setIocError(
+            "The uploaded text file is empty. No IOC analysis was performed."
+          );
+          return;
+        }
+
+        const iocResult =
+          await analyzeEvidence({
+            tenant_id:
+              "default-tenant",
+
+            case_id:
+              String(caseId),
+
+            evidence_id:
+              String(
+                response.evidence_id
+              ),
+
+            text,
+
+            source_type:
+              "file_text",
+
+            options: {
+              enable_fallback:
+                true,
+
+              use_ai: false,
+            },
+          });
+
+        setIocAnalysis(
+          iocResult
+        );
+      } catch (iocAnalysisError) {
+        console.error(
+          "Unable to analyze IOCs:",
+          iocAnalysisError
+        );
+
+        setIocError(
+          "IOC analysis could not be completed."
+        );
+      } finally {
+        setAnalyzingIOC(false);
       }
     } catch (err) {
       console.error(err);
@@ -143,19 +322,25 @@ const CaseDetails = () => {
   };
 
   if (loading) {
+    return <Loading />;
+  }
+
+  if (error) {
     return (
       <div className="page">
-        <Loading />
+        <ErrorMessage
+          message={error}
+          onRetry={fetchCase}
+        />
       </div>
     );
   }
 
-  if (error || !selectedCase) {
+  if (!selectedCase) {
     return (
       <div className="page">
         <ErrorMessage
-          message={error || "Case not found."}
-          onRetry={fetchCase}
+          message="Case not found."
         />
       </div>
     );
@@ -163,198 +348,667 @@ const CaseDetails = () => {
 
   return (
     <div className="page">
-      <button
-        className="back-button"
-        onClick={() => navigate("/cases")}
-      >
-        ← Back to Cases
-      </button>
 
-      <div className="case-details-header">
+      {/* Case Header */}
+
+      <div className="page-header">
         <div>
-          <div className="case-id">
-            {selectedCase.id}
-          </div>
+          <h2>
+            {selectedCase.title}
+          </h2>
 
-          <h2>{selectedCase.title}</h2>
-
-          <p>{selectedCase.description}</p>
+          <p>
+            Case details, evidence and
+            investigation analysis.
+          </p>
         </div>
 
-        <span
-          className={`status-badge ${selectedCase.status
+        <div
+          className={`status-badge status-${selectedCase.status
             .toLowerCase()
             .replace(" ", "-")}`}
         >
           {selectedCase.status}
-        </span>
+        </div>
       </div>
 
+
+      {/* Case Information */}
+
       <div className="case-info-grid">
+
         <div className="case-info-card">
           <span>Case ID</span>
-          <strong>{selectedCase.id}</strong>
+          <strong>
+            {selectedCase.id}
+          </strong>
+        </div>
+
+        <div className="case-info-card">
+          <span>Status</span>
+          <strong>
+            {selectedCase.status}
+          </strong>
         </div>
 
         <div className="case-info-card">
           <span>Created</span>
-          <strong>{selectedCase.created_at}</strong>
+          <strong>
+            {selectedCase.created_at}
+          </strong>
         </div>
 
         <div className="case-info-card">
           <span>Evidence</span>
-          <strong>{evidence.length} files</strong>
+          <strong>
+            {evidence.length}
+          </strong>
         </div>
 
-        <div className="case-info-card">
-          <span>Investigator</span>
-          <strong>Current User</strong>
-        </div>
       </div>
 
-      <div className="evidence-section">
+
+      {/* Description */}
+
+      <div className="case-section">
+
         <div className="section-header">
           <div>
-            <h3>Evidence</h3>
+            <h3>
+              Case Description
+            </h3>
+
             <p>
-              Files associated with this investigation.
+              Investigation information
+              associated with this case.
+            </p>
+          </div>
+        </div>
+
+        <div className="case-description">
+          {selectedCase.description}
+        </div>
+
+      </div>
+
+
+      {/* Evidence Upload */}
+
+      <div className="case-section">
+
+        <div className="section-header">
+          <div>
+            <h3>
+              Upload Evidence
+            </h3>
+
+            <p>
+              Add digital evidence to this
+              investigation case.
             </p>
           </div>
         </div>
 
         <div className="upload-box">
-          <div className="upload-icon">↑</div>
 
-          <div className="upload-content">
-            <h4>Upload Evidence</h4>
+          <input
+            id="evidence-file"
+            type="file"
+            onChange={
+              handleFileChange
+            }
+          />
+
+          {selectedFile && (
+            <div className="selected-file">
+
+              <span>
+                Selected file
+              </span>
+
+              <strong>
+                {selectedFile.name}
+              </strong>
+
+            </div>
+          )}
+
+          {uploadError && (
+            <div className="upload-error">
+              {uploadError}
+            </div>
+          )}
+
+          <button
+            className="primary-button"
+            onClick={handleUpload}
+            disabled={
+              uploading ||
+              !selectedFile
+            }
+          >
+            {uploading
+              ? "Uploading..."
+              : "Upload Evidence"}
+          </button>
+
+        </div>
+
+      </div>
+
+
+      {/* Analysis Status */}
+
+      {analysisStatus && (
+        <div className="case-section">
+
+          <div className="section-header">
+            <div>
+
+              <h3>
+                Analysis Status
+              </h3>
+
+              <p>
+                Current processing status
+                for this evidence.
+              </p>
+
+            </div>
+          </div>
+
+          <div className="analysis-status-grid">
+
+            <div className="analysis-status-card">
+              <span>
+                Hashing
+              </span>
+
+              <strong>
+                {
+                  analysisStatus.hashing_status
+                }
+              </strong>
+            </div>
+
+            <div className="analysis-status-card">
+              <span>
+                Metadata
+              </span>
+
+              <strong>
+                {
+                  analysisStatus.metadata_status
+                }
+              </strong>
+            </div>
+
+            <div className="analysis-status-card">
+              <span>
+                AI Analysis
+              </span>
+
+              <strong>
+                {
+                  analysisStatus.ai_analysis_status
+                }
+              </strong>
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+
+      {/* Evidence List */}
+
+      <div className="case-section">
+
+        <div className="section-header">
+
+          <div>
+            <h3>
+              Evidence
+            </h3>
 
             <p>
-              Select a file to add it to this investigation.
+              Evidence uploaded to this
+              investigation.
+            </p>
+          </div>
+
+        </div>
+
+        {evidence.length === 0 ? (
+
+          <div className="empty-state">
+
+            <strong>
+              No evidence uploaded
+            </strong>
+
+            <p>
+              Upload evidence to begin
+              the investigation.
             </p>
 
-            <input
-              id="evidence-file"
-              type="file"
-              onChange={(event) => {
-                setSelectedFile(
-                  event.target.files?.[0] ?? null
-                );
-                setUploadError("");
-              }}
-              disabled={uploading}
-            />
-
-            {selectedFile && (
-              <div className="selected-file">
-                <span>{selectedFile.name}</span>
-
-                <span>
-                  {(selectedFile.size / 1024 / 1024).toFixed(
-                    2
-                  )}{" "}
-                  MB
-                </span>
-              </div>
-            )}
-
-            {uploadError && (
-              <div className="form-error">
-                {uploadError}
-              </div>
-            )}
-
-            <button
-              className="primary-button upload-button"
-              onClick={handleUpload}
-              disabled={uploading}
-            >
-              {uploading
-                ? "Uploading..."
-                : "Upload Evidence"}
-            </button>
           </div>
-        </div>
 
-        {analysisStatus && (
-          <div className="analysis-status-card">
-            <div>
-              <h4>Evidence Processing</h4>
-              <p>
-                Evidence processing status from the
-                investigation backend.
-              </p>
-            </div>
+        ) : (
 
-            <div className="analysis-status-grid">
-              <div>
-                <span>Hashing</span>
-                <strong>
-                  {analysisStatus.hashing_status}
-                </strong>
-              </div>
+          <div className="evidence-list">
 
-              <div>
-                <span>Metadata</span>
-                <strong>
-                  {analysisStatus.metadata_status}
-                </strong>
-              </div>
+            {evidence.map((item) => (
 
-              <div>
-                <span>AI Analysis</span>
-                <strong>
-                  {analysisStatus.ai_analysis_status}
-                </strong>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="evidence-list">
-          {evidence.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">◈</div>
-
-              <h3>No evidence uploaded</h3>
-
-              <p>
-                Upload evidence to begin processing.
-              </p>
-            </div>
-          ) : (
-            evidence.map((item) => (
               <div
-                className="evidence-row"
+                className="evidence-card"
                 key={item.id}
               >
-                <div className="evidence-file-icon">
-                  {item.file_type.slice(0, 3)}
+
+                <div className="evidence-card-main">
+
+                  <div className="evidence-icon">
+                    ◈
+                  </div>
+
+                  <div>
+
+                    <h4>
+                      {item.filename}
+                    </h4>
+
+                    <div className="evidence-meta">
+
+                      <span>
+                        {item.file_type}
+                      </span>
+
+                      <span>
+                        Evidence ID:{" "}
+                        {item.id}
+                      </span>
+
+                      <span>
+                        Uploaded:{" "}
+                        {item.uploaded_at}
+                      </span>
+
+                    </div>
+
+                  </div>
+
                 </div>
 
-                <div className="evidence-main">
-                  <strong>{item.filename}</strong>
 
-                  <span>
-                    {item.id} • Uploaded{" "}
-                    {item.uploaded_at}
+                <div className="evidence-card-side">
+
+                  <span
+                    className={`status-badge status-${item.status
+                      .toLowerCase()
+                      .replace(" ", "-")}`}
+                  >
+                    {item.status}
                   </span>
+
+                  <span className="hash-value">
+                    {item.sha256}
+                  </span>
+
                 </div>
 
-                <div className="evidence-hash">
-                  <span>SHA-256</span>
-                  <code>{item.sha256}</code>
-                </div>
-
-                <span
-                  className={`evidence-status ${item.status.toLowerCase()}`}
-                >
-                  {item.status}
-                </span>
               </div>
-            ))
-          )}
-        </div>
+
+            ))}
+
+          </div>
+
+        )}
+
       </div>
+
+
+      {/* IOC Analysis */}
+
+      {(analyzingIOC ||
+        iocAnalysis ||
+        iocError) && (
+
+        <div className="case-section">
+
+          <div className="section-header">
+
+            <div>
+
+              <h3>
+                IOC Analysis
+              </h3>
+
+              <p>
+                Indicators of compromise
+                detected in the uploaded
+                evidence.
+              </p>
+
+            </div>
+
+            {iocAnalysis && (
+              <div className="ioc-total">
+                {
+                  iocAnalysis.iocs
+                    .length
+                }{" "}
+                IOCs
+              </div>
+            )}
+
+          </div>
+
+
+          {/* IOC Loading */}
+
+          {analyzingIOC && (
+
+            <div className="loading">
+
+              <div className="spinner"></div>
+
+              <span>
+                Analyzing evidence for
+                IOCs...
+              </span>
+
+            </div>
+
+          )}
+
+
+          {/* IOC Error */}
+
+          {iocError && (
+
+            <div className="error-message">
+
+              <div>
+
+                <strong>
+                  IOC Analysis
+                </strong>
+
+                <p>
+                  {iocError}
+                </p>
+
+              </div>
+
+            </div>
+
+          )}
+
+
+          {/* No IOCs */}
+
+          {iocAnalysis &&
+            iocAnalysis.iocs.length ===
+              0 && (
+
+              <div className="empty-state">
+
+                <strong>
+                  No IOCs detected
+                </strong>
+
+                <p>
+                  No supported indicators
+                  of compromise were found
+                  in this evidence.
+                </p>
+
+              </div>
+
+            )}
+
+
+          {/* IOC Table */}
+
+          {iocAnalysis &&
+            iocAnalysis.iocs.length >
+              0 && (
+
+              <div className="ioc-table-wrapper">
+
+                <table className="data-table">
+
+                  <thead>
+
+                    <tr>
+
+                      <th>
+                        Type
+                      </th>
+
+                      <th>
+                        Indicator
+                      </th>
+
+                      <th>
+                        Risk
+                      </th>
+
+                      <th>
+                        Score
+                      </th>
+
+                      <th>
+                        MITRE ATT&CK
+                      </th>
+
+                    </tr>
+
+                  </thead>
+
+                  <tbody>
+
+                    {iocAnalysis.iocs.map(
+                      (ioc) => (
+
+                        <tr
+                          key={`${ioc.dedupe_key}-${ioc.value_normalized}`}
+                        >
+
+                          <td>
+
+                            <span className="ioc-type">
+                              {ioc.type.toUpperCase()}
+                            </span>
+
+                          </td>
+
+                          <td>
+
+                            <strong>
+                              {
+                                ioc.value_normalized
+                              }
+                            </strong>
+
+                          </td>
+
+                          <td>
+
+                            <span
+                              className={`risk-badge risk-${ioc.risk_level}`}
+                            >
+                              {ioc.risk_level.toUpperCase()}
+                            </span>
+
+                          </td>
+
+                          <td>
+                            {ioc.risk_score}
+                          </td>
+
+                          <td>
+                            {ioc.mitre_ids.length >
+                            0
+                              ? ioc.mitre_ids.join(
+                                  ", "
+                                )
+                              : "—"}
+                          </td>
+
+                        </tr>
+
+                      )
+                    )}
+
+                  </tbody>
+
+                </table>
+
+              </div>
+
+            )}
+
+
+          {/* IOC Details */}
+
+          {iocAnalysis &&
+            iocAnalysis.iocs.length >
+              0 && (
+
+              <div className="ioc-details-list">
+
+                {iocAnalysis.iocs.map(
+                  (ioc) => (
+
+                    <div
+                      className="ioc-detail-card"
+                      key={`details-${ioc.dedupe_key}-${ioc.value_normalized}`}
+                    >
+
+                      <div className="ioc-detail-header">
+
+                        <strong>
+                          {
+                            ioc.value_normalized
+                          }
+                        </strong>
+
+                        <span
+                          className={`risk-badge risk-${ioc.risk_level}`}
+                        >
+                          {ioc.risk_level.toUpperCase()}
+                        </span>
+
+                      </div>
+
+
+                      {ioc.context_snippet && (
+
+                        <div className="ioc-context">
+
+                          <span>
+                            Context
+                          </span>
+
+                          <p>
+                            {
+                              ioc.context_snippet
+                            }
+                          </p>
+
+                        </div>
+
+                      )}
+
+
+                      {ioc.reasons.length >
+                        0 && (
+
+                        <div className="ioc-reasons">
+
+                          <span>
+                            Reasons
+                          </span>
+
+                          <ul>
+
+                            {ioc.reasons.map(
+                              (
+                                reason,
+                                index
+                              ) => (
+
+                                <li
+                                  key={
+                                    index
+                                  }
+                                >
+                                  {reason}
+                                </li>
+
+                              )
+                            )}
+
+                          </ul>
+
+                        </div>
+
+                      )}
+
+
+                      {ioc.mitre_ids.length >
+                        0 && (
+
+                        <div className="ioc-mitre">
+
+                          <span>
+                            MITRE ATT&CK
+                          </span>
+
+                          <strong>
+                            {
+                              ioc.mitre_ids.join(
+                                ", "
+                              )
+                            }
+                          </strong>
+
+                        </div>
+
+                      )}
+
+
+                      {ioc.ai_accepted && (
+
+                        <div className="ioc-mitre">
+
+                          <span>
+                            AI Analysis
+                          </span>
+
+                          <strong>
+                            Accepted
+                          </strong>
+
+                        </div>
+
+                      )}
+
+                    </div>
+
+                  )
+                )}
+
+              </div>
+
+            )}
+
+        </div>
+
+      )}
+
     </div>
   );
 };
