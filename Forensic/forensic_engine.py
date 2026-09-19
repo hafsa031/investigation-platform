@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
+import os
 import re
 import sys
 import zipfile
@@ -21,29 +22,54 @@ from typing import Any, Optional
 CHUNK_SIZE = 65536  # 64KB, so large evidence files don't blow up memory
 
 
-def compute_sha256(file_path: Path) -> dict:
-    """SHA-256 hash of the file — the chain-of-custody anchor. Computed
-    first, always, before anything else touches the file."""
+def compute_hashes(file_path: Path) -> dict:
+    """SHA-256 and MD5 — the chain-of-custody anchors. Computed together
+    in a single pass over the file, first, always, before anything else
+    touches it. SHA-256 is primary/verification; MD5 is kept alongside
+    for legacy tooling and cross-reference against malware hash
+    databases, which still index heavily on MD5."""
     sha256 = hashlib.sha256()
+    md5 = hashlib.md5()
     with open(file_path, "rb") as f:
         while chunk := f.read(CHUNK_SIZE):
             sha256.update(chunk)
+            md5.update(chunk)
+    computed_at = datetime.now(timezone.utc).isoformat()
     return {
-        "algorithm": "SHA-256",
-        "hash_value": sha256.hexdigest(),
-        "computed_at": datetime.now(timezone.utc).isoformat(),
+        "sha256": sha256.hexdigest(),
+        "md5": md5.hexdigest(),
+        "computed_at": computed_at,
+        # Row-shaped view too, for a schema like EvidenceHashes(algorithm, hash_value)
+        "hashes": [
+            {"algorithm": "SHA-256", "hash_value": sha256.hexdigest(), "computed_at": computed_at},
+            {"algorithm": "MD5", "hash_value": md5.hexdigest(), "computed_at": computed_at},
+        ],
     }
 
 
-def verify_integrity(file_path: Path, expected_hash: str) -> bool:
-    """Re-hash and compare — used to detect tampering of stored evidence."""
-    return compute_sha256(file_path)["hash_value"].lower() == expected_hash.lower()
+def compute_sha256(file_path: Path) -> dict:
+    """Back-compat wrapper: old single-hash shape. Prefer compute_hashes()."""
+    hashes = compute_hashes(file_path)
+    return {
+        "algorithm": "SHA-256",
+        "hash_value": hashes["sha256"],
+        "computed_at": hashes["computed_at"],
+    }
+
+
+def verify_integrity(file_path: Path, expected_hash: str, algorithm: str = "sha256") -> bool:
+    """Re-hash and compare — used to detect tampering of stored evidence.
+    algorithm: 'sha256' (default) or 'md5'."""
+    hashes = compute_hashes(file_path)
+    actual = hashes["md5"] if algorithm.lower() == "md5" else hashes["sha256"]
+    return actual.lower() == expected_hash.lower()
 
 
 
 # FILE TYPE IDENTIFICATION (magic bytes, no libmagic dependency)
 
 _SIGNATURES = [
+    # Images
     (b"\xff\xd8\xff", 0, "jpg", "image/jpeg", "image"),
     (b"\x89PNG\r\n\x1a\n", 0, "png", "image/png", "image"),
     (b"GIF87a", 0, "gif", "image/gif", "image"),
@@ -51,13 +77,49 @@ _SIGNATURES = [
     (b"BM", 0, "bmp", "image/bmp", "image"),
     (b"II*\x00", 0, "tiff", "image/tiff", "image"),
     (b"MM\x00*", 0, "tiff", "image/tiff", "image"),
+    (b"WEBP", 8, "webp", "image/webp", "image"),
+
+    # Documents
     (b"%PDF-", 0, "pdf", "application/pdf", "document"),
-    (b"PK\x03\x04", 0, "zip", "application/zip", "archive"),  # also docx/xlsx/pptx
-    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 0, "doc", "application/msword", "document"),
+    (b"{\\rtf1", 0, "rtf", "application/rtf", "document"),
+    # Legacy OLE compound container — doc/xls/ppt all share this signature,
+    # disambiguated by _disambiguate_ole() below.
+    (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", 0, "ole", "application/x-ole-storage", "document"),
+
+    # Archives / containers
+    (b"PK\x03\x04", 0, "zip", "application/zip", "archive"),  # also docx/xlsx/pptx/jar/apk
+    (b"PK\x05\x06", 0, "zip", "application/zip", "archive"),  # empty zip
     (b"Rar!\x1a\x07\x00", 0, "rar", "application/x-rar-compressed", "archive"),
+    (b"7z\xbc\xaf\x27\x1c", 0, "7z", "application/x-7z-compressed", "archive"),
+    (b"BZh", 0, "bz2", "application/x-bzip2", "archive"),
+    (b"\xfd7zXZ\x00", 0, "xz", "application/x-xz", "archive"),
     (b"\x1f\x8b", 0, "gz", "application/gzip", "archive"),
+    (b"ustar", 257, "tar", "application/x-tar", "archive"),
+
+    # Executables / binaries — high forensic value (malware, dropped tools)
+    (b"MZ", 0, "exe", "application/x-msdownload", "executable"),  # PE; refined by extract_pe_summary
+    (b"\x7fELF", 0, "elf", "application/x-elf", "executable"),
+    (b"\xca\xfe\xba\xbe", 0, "macho", "application/x-mach-binary", "executable"),  # fat/universal
+    (b"\xfe\xed\xfa\xce", 0, "macho", "application/x-mach-binary", "executable"),
+    (b"\xfe\xed\xfa\xcf", 0, "macho", "application/x-mach-binary", "executable"),
+    (b"\xcf\xfa\xed\xfe", 0, "macho", "application/x-mach-binary", "executable"),
+
+    # Databases — SQLite backs browser history, WhatsApp/Telegram, call logs
+    (b"SQLite format 3\x00", 0, "sqlite", "application/vnd.sqlite3", "database"),
+
+    # Audio
     (b"ID3", 0, "mp3", "audio/mpeg", "audio"),
+    (b"\xff\xfb", 0, "mp3", "audio/mpeg", "audio"),
+    (b"fLaC", 0, "flac", "audio/flac", "audio"),
+    (b"OggS", 0, "ogg", "audio/ogg", "audio"),
+    (b"WAVE", 8, "wav", "audio/wav", "audio"),
+
+    # Video
     (b"\x00\x00\x00\x18ftyp", 4, "mp4", "video/mp4", "video"),
+    (b"\x00\x00\x00\x20ftyp", 4, "mp4", "video/mp4", "video"),
+    (b"ftyp", 4, "mp4", "video/mp4", "video"),  # generic ISO-BMFF catch-all (mp4/mov/m4a family)
+    (b"AVI ", 8, "avi", "video/x-msvideo", "video"),
+    (b"\x1a\x45\xdf\xa3", 0, "mkv", "video/x-matroska", "video"),  # also matches .webm
 ]
 
 _OOXML_INNER = {
@@ -79,6 +141,77 @@ def _disambiguate_ooxml(file_path: Path):
     return None
 
 
+_OLE_STREAM_MARKERS = {
+    "WordDocument": ("doc", "document"),
+    "Workbook": ("xls", "document"),
+    "Book": ("xls", "document"),
+    "PowerPoint Document": ("ppt", "document"),
+}
+
+
+def _disambiguate_ole(file_path: Path, declared_ext: Optional[str]):
+    """Legacy .doc/.xls/.ppt all share one OLE compound-file signature.
+    If 'olefile' is installed, peek at the internal stream names for a
+    confident answer; otherwise fall back to the declared extension
+    (kept low-confidence downstream since a renamed file would fool it)."""
+    try:
+        import olefile
+        if olefile.isOleFile(str(file_path)):
+            with olefile.OleFileIO(str(file_path)) as ole:
+                streams = {entry[0] for entry in ole.listdir()}
+                for marker, result in _OLE_STREAM_MARKERS.items():
+                    if marker in streams:
+                        return result, "high"
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    if declared_ext in {"doc", "xls", "ppt"}:
+        return (declared_ext, "document"), "low"
+    return ("doc", "document"), "low"
+
+
+_TEXT_FORMAT_META = {
+    "json": ("application/json", "data"),
+    "xml": ("application/xml", "data"),
+    "html": ("text/html", "document"),
+    "csv": ("text/csv", "data"),
+    "eml": ("message/rfc822", "email"),
+}
+
+
+def _sniff_text_format(file_path: Path) -> Optional[str]:
+    """Cheap content sniff for text-based formats that have no magic
+    bytes at all. Only runs when no binary signature matched, so it never
+    overrides a confident detection."""
+    try:
+        with open(file_path, "r", errors="ignore") as f:
+            head = f.read(2048).lstrip()
+    except Exception:
+        return None
+    if not head:
+        return None
+
+    if re.match(r"^(From|Return-Path|Received|Delivered-To|Message-ID):\s", head, re.I | re.M):
+        return "eml"
+    lower = head.lower()
+    if lower.startswith("<!doctype html") or "<html" in lower[:200]:
+        return "html"
+    if head.startswith("<?xml") or (head.startswith("<") and re.match(r"^<[a-zA-Z]", head)):
+        return "xml"
+    if head[0] in "{[":
+        try:
+            json.loads(head)
+            return "json"
+        except json.JSONDecodeError:
+            return "json"  # likely truncated by the 2KB read, still almost certainly JSON
+    first_line = head.splitlines()[0] if head.splitlines() else ""
+    if first_line.count(",") >= 1 and len(head.splitlines()) > 1:
+        return "csv"
+    return None
+
+
 def identify_file(file_path: Path) -> dict:
     """Detect the ACTUAL file type from content and compare it against the
     declared extension. A mismatch (e.g. a .pdf renamed to .jpg) is a
@@ -86,7 +219,7 @@ def identify_file(file_path: Path) -> dict:
     declared_ext = file_path.suffix.lstrip(".").lower() or None
 
     with open(file_path, "rb") as f:
-        header = f.read(64)
+        header = f.read(512)  # covers the tar magic at offset 257
 
     detected_ext, mime_type, category = None, None, "unknown"
     for sig, offset, ext, mime, cat in _SIGNATURES:
@@ -94,31 +227,45 @@ def identify_file(file_path: Path) -> dict:
             detected_ext, mime_type, category = ext, mime, cat
             break
 
+    ole_confidence = None
+
     if detected_ext == "zip":
         ooxml = _disambiguate_ooxml(file_path)
         if ooxml:
             detected_ext, category = ooxml
             mime_type = mimetypes.guess_type(f"f.{detected_ext}")[0] or mime_type
 
+    elif detected_ext == "ole":
+        (detected_ext, category), ole_confidence = _disambiguate_ole(file_path, declared_ext)
+        mime_type = mimetypes.guess_type(f"f.{detected_ext}")[0] or mime_type
+
     if detected_ext is None:
-        guessed_mime, _ = mimetypes.guess_type(str(file_path))
-        mime_type = guessed_mime
-        detected_ext = declared_ext
-        if declared_ext in {"log", "txt"}:
-            category = "log"
+        sniffed = _sniff_text_format(file_path)
+        if sniffed:
+            detected_ext = sniffed
+            mime_type, category = _TEXT_FORMAT_META[sniffed]
+        else:
+            guessed_mime, _ = mimetypes.guess_type(str(file_path))
+            mime_type = guessed_mime
+            detected_ext = declared_ext
+            if declared_ext in {"log", "txt"}:
+                category = "log"
 
     is_mismatch = bool(
         declared_ext and detected_ext and declared_ext != detected_ext
         and not (declared_ext in {"jpg", "jpeg"} and detected_ext in {"jpg", "jpeg"})
     )
 
-    return {
+    result = {
         "declared_extension": declared_ext,
         "detected_extension": detected_ext,
         "mime_type": mime_type,
         "category": category,
         "is_mismatch": is_mismatch,
     }
+    if ole_confidence:
+        result["ole_subtype_confidence"] = ole_confidence
+    return result
 
 
 # FILESYSTEM METADATA / TIMESTAMPS
@@ -200,6 +347,54 @@ def extract_exif(file_path: Path) -> dict:
         "software": tags.get("Software"),
         "raw_tags": tags,
     }
+
+# PE EXECUTABLE SUMMARY (exe/dll/sys) — no external dependency
+
+_PE_MACHINE_TYPES = {0x14c: "x86", 0x8664: "x64", 0x1c0: "ARM", 0xaa64: "ARM64"}
+
+
+def extract_pe_summary(file_path: Path) -> Optional[dict]:
+    """Minimal PE header parse for triage: machine type, EXE vs DLL vs
+    driver, section count, and the linker-set compile timestamp (useful
+    for timeline correlation, though it's attacker-controllable and
+    should be flagged as such, not trusted outright)."""
+    try:
+        with open(file_path, "rb") as f:
+            dos_header = f.read(64)
+            if dos_header[:2] != b"MZ" or len(dos_header) < 64:
+                return None
+            e_lfanew = int.from_bytes(dos_header[0x3C:0x40], "little")
+            f.seek(e_lfanew)
+            pe_header = f.read(24)
+    except (OSError, ValueError):
+        return None
+
+    if len(pe_header) < 24 or pe_header[:4] != b"PE\x00\x00":
+        return {"is_valid_pe": False}
+
+    machine = int.from_bytes(pe_header[4:6], "little")
+    num_sections = int.from_bytes(pe_header[6:8], "little")
+    timestamp = int.from_bytes(pe_header[8:12], "little")
+    characteristics = int.from_bytes(pe_header[22:24], "little")
+
+    try:
+        compile_time = (
+            datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat()
+            if 0 < timestamp < 2_147_483_647 else None
+        )
+    except (OSError, OverflowError, ValueError):
+        compile_time = None
+
+    return {
+        "is_valid_pe": True,
+        "machine": _PE_MACHINE_TYPES.get(machine, hex(machine)),
+        "is_dll": bool(characteristics & 0x2000),
+        "is_system_file": bool(characteristics & 0x1000),
+        "num_sections": num_sections,
+        "compile_timestamp_utc": compile_time,
+        "compile_timestamp_note": "PE-header timestamp; commonly forged by malware, treat as low confidence",
+    }
+
 
 #  DOCUMENT METADATA (PDF / DOCX)
 
@@ -375,18 +570,156 @@ def build_timeline(fs_metadata: dict, exif: Optional[dict], doc_metadata: Option
     return events
 
 
+# 8. FINDING CLASSIFICATION (Normal / Suspicious / Critical)
+
+_SEVERITY_ORDER = {"Normal": 0, "Suspicious": 1, "Critical": 2}
+
+
+def classify_finding(identification: dict, pe_summary: Optional[dict],
+                      processing_errors: list[str]) -> dict:
+    """Rule-based triage over what the pipeline already extracted — no
+    new scanning, just reasoning about the signals already in hand.
+    Each rule records its own reason, so an investigator sees exactly
+    why a verdict was assigned rather than trusting a black-box label.
+    Verdict only ever escalates (Normal -> Suspicious -> Critical),
+    never downgrades, so the worst finding always wins."""
+    level = "Normal"
+    reasons: list[str] = []
+
+    def escalate(new_level: str, reason: str) -> None:
+        nonlocal level
+        if _SEVERITY_ORDER[new_level] > _SEVERITY_ORDER[level]:
+            level = new_level
+        reasons.append(reason)
+
+    # Extension/content mismatch is a classic disguise technique
+    if identification.get("is_mismatch"):
+        escalate(
+            "Suspicious",
+            f"Declared extension '.{identification.get('declared_extension')}' does not match "
+            f"detected type '.{identification.get('detected_extension')}'.",
+        )
+
+    # Executable content is inherently higher-risk evidence
+    if identification.get("category") == "executable":
+        escalate("Suspicious", f"File is an executable ({identification.get('detected_extension')}).")
+
+    if pe_summary:
+        if pe_summary.get("is_valid_pe"):
+            if identification.get("is_mismatch"):
+                escalate("Critical", "Executable content disguised behind a non-executable extension.")
+            if pe_summary.get("compile_timestamp_utc") is None:
+                escalate("Suspicious", "PE compile timestamp missing/invalid — often indicates a forged header.")
+        else:
+            escalate("Suspicious", "File has an MZ header but is not a well-formed PE — possibly corrupted or crafted.")
+
+    # Legacy OLE container whose real subtype (doc/xls/ppt) couldn't be confirmed
+    if identification.get("ole_subtype_confidence") == "low":
+        escalate("Suspicious", "Legacy Office container type could not be confirmed from internal stream names.")
+
+    # Any extraction step failing is itself worth a human look
+    if processing_errors:
+        escalate("Suspicious", f"{len(processing_errors)} extraction step(s) failed during processing.")
+
+    if not reasons:
+        reasons.append("No indicators found in extracted metadata; file is consistent with its declared type.")
+
+    return {"classification": level, "reasons": reasons}
+
+
+# 9. STRUCTURED FORENSIC FINDINGS RECORD
+
+def build_forensic_finding(evidence_id: Optional[str], case_id: Optional[str], file_hash: dict,
+                            identification: dict, fs_metadata: dict, exif_data: Optional[dict],
+                            doc_metadata: Optional[dict], pe_summary: Optional[dict],
+                            timeline_events: list[dict], classification: dict) -> dict:
+    """Packages the extraction results into the compact Forensic Findings
+    record that goes to the backend for the dashboard — a summary meant
+    for the Findings table/list, not the full raw extraction payload."""
+    return {
+        "evidence_id": evidence_id,
+        "case_id": case_id,
+        "file_name": fs_metadata.get("file_name"),
+        "file_size_bytes": fs_metadata.get("size_bytes"),
+        "declared_extension": identification.get("declared_extension"),
+        "detected_extension": identification.get("detected_extension"),
+        "mime_type": identification.get("mime_type"),
+        "category": identification.get("category"),
+        "extension_mismatch": identification.get("is_mismatch", False),
+        "sha256": file_hash.get("sha256"),
+        "md5": file_hash.get("md5"),
+        "created_time": fs_metadata.get("created_time"),
+        "modified_time": fs_metadata.get("modified_time"),
+        "has_exif": bool(exif_data and exif_data.get("has_exif")),
+        "has_document_metadata": doc_metadata is not None,
+        "is_executable": identification.get("category") == "executable",
+        "pe_summary": pe_summary,
+        "timeline_event_count": len(timeline_events),
+        "classification": classification["classification"],
+        "classification_reasons": classification["reasons"],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# 10. BACKEND INTEGRATION — send findings to Intern 1's API
+
+try:
+    import requests
+except ImportError:
+    requests = None
+
+# Override with the real deployed URL via env var once Intern 1's API is live,
+# e.g. JAGSPIRE_BACKEND_URL=https://api.jagspire.internal
+BACKEND_BASE_URL = os.environ.get("JAGSPIRE_BACKEND_URL", "http://localhost:8000")
+
+
+def send_finding_to_backend(case_id: str, finding: dict, base_url: Optional[str] = None,
+                             timeout: int = 10) -> dict:
+    """POSTs one structured finding to POST /cases/{case_id}/findings so
+    it shows up on the investigator dashboard. Never raises — network,
+    HTTP, or missing-dependency failures come back as a status dict so
+    the caller can log/retry instead of losing the rest of the pipeline
+    run over a backend that isn't reachable yet."""
+    if requests is None:
+        return {"sent": False, "error": "The 'requests' package is not installed."}
+    if not case_id:
+        return {"sent": False, "error": "No case_id provided; cannot post finding."}
+
+    url = f"{(base_url or BACKEND_BASE_URL).rstrip('/')}/cases/{case_id}/findings"
+    try:
+        resp = requests.post(url, json=finding, timeout=timeout)
+        resp.raise_for_status()
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        return {"sent": True, "status_code": resp.status_code, "response": body}
+    except requests.exceptions.RequestException as e:
+        return {"sent": False, "error": str(e)}
+
+
 # ONE ENGINE, ONE CALL: process_evidence()
 
-def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: str = None) -> dict:
+def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: str = None,
+                      send_to_backend: bool = False, backend_url: Optional[str] = None) -> dict:
     """
     THE single entry point. Pass a file in, get the full forensic result
-    back — hash, file identification, filesystem metadata, EXIF, document
-    metadata, parsed log entries, and a unified timeline — all in one call.
+    back — hashes, file identification, filesystem metadata, EXIF, document
+    metadata, parsed log entries, a unified timeline, a Normal/Suspicious/
+    Critical classification, and the structured Forensic Findings record
+    built from all of it — all in one call.
 
     This is what Intern 1 should call from the Evidence Upload API right
-    after a file is saved to disk, and what Intern 6 should persist as-is
-    (the keys already line up with the Evidence / EvidenceHashes /
-    TimelineEvents tables).
+    after a file is saved to disk, and what Intern 1's persistence layer
+    should store as-is (the keys line up with the Evidence /
+    EvidenceHashes / TimelineEvents tables; "forensic_finding" is the
+    record meant for the Findings table).
+
+    Pass send_to_backend=True (with case_id set) to also POST
+    "forensic_finding" to /cases/{case_id}/findings so it lands on the
+    dashboard immediately; the result of that call is returned under
+    "backend_send_result" and a failed/skipped send never raises — it's
+    reported in the result so the caller can retry.
     """
     path = Path(file_path)
     if not path.exists():
@@ -395,7 +728,7 @@ def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: st
     errors = []
 
     # Hash first, always — the chain-of-custody anchor
-    file_hash = compute_sha256(path)
+    file_hash = compute_hashes(path)
 
     # Identify actual file type (don't trust the extension)
     identification = identify_file(path)
@@ -406,6 +739,7 @@ def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: st
     exif_data = None
     doc_metadata = None
     log_entries = []
+    pe_summary = None
 
     # Type-specific extraction — each isolated so one failure doesn't
     # take down the whole pipeline
@@ -427,7 +761,24 @@ def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: st
     except Exception as e:
         errors.append(f"Log parsing failed: {e}")
 
+    try:
+        if identification["category"] == "executable" and identification["detected_extension"] == "exe":
+            pe_summary = extract_pe_summary(path)
+    except Exception as e:
+        errors.append(f"PE summary extraction failed: {e}")
+
     timeline_events = build_timeline(fs_metadata, exif_data, doc_metadata, log_entries)
+
+    # Classify, then build the compact record the dashboard actually wants
+    classification = classify_finding(identification, pe_summary, errors)
+    finding = build_forensic_finding(
+        evidence_id, case_id, file_hash, identification, fs_metadata,
+        exif_data, doc_metadata, pe_summary, timeline_events, classification,
+    )
+
+    backend_send_result = None
+    if send_to_backend:
+        backend_send_result = send_finding_to_backend(case_id, finding, base_url=backend_url)
 
     return {
         "evidence_id": evidence_id,
@@ -437,8 +788,12 @@ def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: st
         "filesystem_metadata": fs_metadata,
         "exif": exif_data,
         "document_metadata": doc_metadata,
+        "pe_summary": pe_summary,
         "log_entries": log_entries,
         "timeline_events": timeline_events,
+        "classification": classification,
+        "forensic_finding": finding,
+        "backend_send_result": backend_send_result,
         "processing_errors": errors,
         "processed_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -446,11 +801,22 @@ def process_evidence(file_path: str | Path, case_id: str = None, evidence_id: st
 # CLI entry point — run this file directly on any evidence file
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python forensic_engine.py <path-to-evidence-file-or-folder>")
+    args = sys.argv[1:]
+    send_flag = "--send" in args
+    if send_flag:
+        args.remove("--send")
+
+    if not args:
+        print("Usage: python forensic_engine.py <path-to-evidence-file-or-folder> [case_id] [--send]")
+        print("  --send  POST each finding to the backend (needs case_id and JAGSPIRE_BACKEND_URL)")
         sys.exit(1)
 
-    target = Path(sys.argv[1])
+    target = Path(args[0])
+    case_id = args[1] if len(args) > 1 else None
+
+    if send_flag and not case_id:
+        print("--send requires a case_id: python forensic_engine.py <path> <case_id> --send")
+        sys.exit(1)
 
     if not target.exists():
         print(f"Path not found: {target}")
@@ -468,11 +834,11 @@ if __name__ == "__main__":
         results = []
         for f in files:
             try:
-                results.append(process_evidence(f))
+                results.append(process_evidence(f, case_id=case_id, send_to_backend=send_flag))
             except Exception as e:
                 results.append({"file_name": f.name, "error": str(e)})
 
         print(json.dumps(results, indent=2, default=str))
     else:
-        result = process_evidence(target)
+        result = process_evidence(target, case_id=case_id, send_to_backend=send_flag)
         print(json.dumps(result, indent=2, default=str))
