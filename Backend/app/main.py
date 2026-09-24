@@ -42,7 +42,8 @@ app.include_router(auth.router)
 app.include_router(cases.router)
 
 # 3. Integrated IOC Threat Analysis Router
-app.include_router(ioc_router, prefix="/ioc", tags=["Cybersecurity Module"])
+# Clean inclusion (uses the router's existing tag):
+app.include_router(ioc_router, prefix="/ioc")
 
 
 @app.get("/", tags=["Health Check"])
