@@ -70,3 +70,8 @@ class AnalyzeResponse(BaseModel):
     text_truncated: bool = Field(default=False)
     counts: dict[str, int] = Field(default_factory=dict)
     iocs: list[IOCRecord] = Field(default_factory=list)
+<<<<<<< HEAD
+=======
+    findings: list[dict] = Field(default_factory=list, description="Sprint-2 ThreatFinding dicts (ioc/type/source/severity/timestamp/reason)")
+    correlations: dict = Field(default_factory=dict, description="Sprint-2 correlate() output")
+>>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423

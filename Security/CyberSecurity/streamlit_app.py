@@ -98,6 +98,38 @@ if st.button("🔍 Analyze", type="primary", disabled=not text.strip()):
               "line": i.line_no, "reasons": ";".join(i.reasons)} for i in rows],
             ["type", "value", "risk", "score", "mitre", "line", "reasons"]),
             file_name="iocs.csv", mime="text/csv")
+<<<<<<< HEAD
+=======
+
+    # ---- Sprint-2: Investigation View (Threat Findings + correlation) ----
+    if res.findings:
+        st.header("🔎 Investigation View — Threat Findings")
+        sev = st.selectbox("Severity filter", ["all", "critical", "high", "medium", "low"])
+        frows = [f for f in res.findings if sev == "all" or f.get("severity") == sev]
+        st.dataframe([{
+            "severity": f"{LEVEL_COLOR.get(f['severity'], '')} {f['severity']}",
+            "ioc": f["ioc"], "type": f["type"],
+            "reason": (f["reason"][:90] + "…") if len(f["reason"]) > 90 else f["reason"],
+            "observation": (f["observation"][:110] + "…") if len(f["observation"]) > 110 else f["observation"],
+        } for f in frows], use_container_width=True, hide_index=True)
+    corr = res.correlations or {}
+    if corr:
+        st.header("🔗 Correlation")
+        roll = corr.get("rollup", {})
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Case verdict", roll.get("verdict", "-"))
+        c2.metric("Worst severity", roll.get("worst_severity", "-"))
+        c3.metric("IOCs", roll.get("ioc_count", 0))
+        c4.metric("Shared pivots", len(corr.get("shared_iocs", [])))
+        if corr.get("shared_iocs"):
+            st.subheader("Pivot IOCs (seen in 2+ evidence)")
+            st.dataframe(corr["shared_iocs"], use_container_width=True, hide_index=True)
+        if corr.get("colocated_links"):
+            st.subheader("Colocated links (IP + URL/domain on one line)")
+            st.dataframe(corr["colocated_links"], use_container_width=True, hide_index=True)
+        with st.expander("Timeline (line-ordered)"):
+            st.dataframe(corr.get("timeline", []), use_container_width=True, hide_index=True)
+>>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423
 else:
     st.info("Pick a fixture, upload a file, or paste text — then Analyze.")
     st.write("Try `auth.log`: attacker `198.51.100.23` → HIGH `T1110`, loopback capped LOW.")

@@ -61,3 +61,59 @@ def list_iocs(
 def health() -> dict:
     """Liveness probe — no auth required."""
     return {"status": "ok"}
+<<<<<<< HEAD
+=======
+
+
+def _case_analyses(case_id: str) -> list[AnalyzeResponse]:
+    """All stored analyses for one case (Intern-1 persists; this is the demo store)."""
+    return [a for a in _ANALYSES if str(a.case_id) == str(case_id)]
+
+
+@router.get("/by-case/{case_id}/iocs", response_model=dict)
+def case_iocs(
+    case_id: str,
+    level: Optional[str] = Query(default=None),
+    _subject: Optional[str] = Depends(_current_subject),
+) -> dict:
+    """Sprint-2: IOCs for a case — backs GET /cases/{case_id}/iocs on the gateway."""
+    items: list[dict] = []
+    for a in _case_analyses(case_id):
+        for rec in a.iocs:
+            if level and rec.risk_level != level:
+                continue
+            d = rec.model_dump()
+            d["evidence_id"] = str(a.evidence_id)
+            items.append(d)
+    return {"case_id": case_id, "total": len(items), "items": items}
+
+
+@router.get("/by-case/{case_id}/findings", response_model=dict)
+def case_findings(
+    case_id: str,
+    severity: Optional[str] = Query(default=None),
+    _subject: Optional[str] = Depends(_current_subject),
+) -> dict:
+    """Sprint-2: Threat Findings for a case — backs GET /cases/{case_id}/findings."""
+    items: list[dict] = []
+    for a in _case_analyses(case_id):
+        for f in a.findings:
+            if severity and f.get("severity") != severity:
+                continue
+            items.append(f)
+    return {"case_id": case_id, "total": len(items), "items": items}
+
+
+@router.get("/by-case/{case_id}/summary", response_model=dict)
+def case_summary(
+    case_id: str,
+    _subject: Optional[str] = Depends(_current_subject),
+) -> dict:
+    """Sprint-2: case rollup for the Case Summary dashboard card."""
+    from backend.app.ioc import correlation as _corr
+
+    recs = [rec for a in _case_analyses(case_id) for rec in a.iocs]
+    rollup = _corr.case_rollup(recs) if recs else {"ioc_count": 0, "verdict": "normal"}
+    return {"case_id": case_id,
+            "evidence_count": len(_case_analyses(case_id)), **rollup}
+>>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423

@@ -1,4 +1,12 @@
+<<<<<<< HEAD
 pydantic==2.12.5
 tldextract==5.3.0
 pytest
 pytest-cov
+=======
+pydantic>=2
+tldextract
+fastapi
+pytest
+pytest-cov
+>>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423
