@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.core.exceptions import global_exception_handler
-from app.routers import auth, cases, evidence, analysis
+from app.routers import auth, cases
 
 # Path resolution:
 # ROOT_DIR is "Investigation Platform"
@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 CYBERSECURITY_DIR = ROOT_DIR / "Security" / "CyberSecurity"
 sys.path.append(str(CYBERSECURITY_DIR))
 
-# Import your teammate's IOC router
+# Import teammate's IOC router
 from backend.app.ioc.api import router as ioc_router
 
 
@@ -35,16 +35,16 @@ app.add_middleware(
 
 app.add_exception_handler(Exception, global_exception_handler)
 
-# Core platform routers
+# 1. Auth Router
 app.include_router(auth.router)
+
+# 2. Cases, Evidence & Investigation Router
 app.include_router(cases.router)
-app.include_router(evidence.router)
-app.include_router(analysis.router)
 
-# Integrated IOC Threat Analysis router
-app.include_router(ioc_router, prefix="/ioc", tags=["IOC Analysis"])
+# 3. Integrated IOC Threat Analysis Router
+app.include_router(ioc_router, prefix="/ioc", tags=["Cybersecurity Module"])
 
 
-@app.get("/")
+@app.get("/", tags=["Health Check"])
 async def root():
     return {"message": "Jagspire AI Investigation Backend API is running."}
