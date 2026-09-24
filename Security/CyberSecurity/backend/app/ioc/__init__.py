@@ -14,4 +14,5 @@ from backend.app.ioc.schemas import (
     SourceType,
 )
 
-__all__ = ["__version__", "IOCAnalyzeRequest", "IOCRecord", "AnalyzeResponse", "IOCAnalyzeOptions", "SourceType", "IOCType", "RiskLevel", "IOCStatus", "ErrorDetail", "ErrorResponse"]
+__all__ = ["__version__", "IOCAnalyzeRequest", "IOCRecord", "AnalyzeResponse", "IOCAnalyzeOptions", "SourceType", "IOCType", "RiskLevel", "IOCStatus", "ErrorDetail", "ErrorResponse",
+           "threat_findings", "correlation"]
