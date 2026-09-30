@@ -5,24 +5,22 @@ import {
 import { useParams } from "react-router-dom";
 
 import type {
-  Case,
+  BackendCase,
   Evidence,
-  ForensicAnalysis,
-} from "../types";
+  Finding,
+  CaseIOC,
+  ForensicAnalysisResponse,
+  IOCAnalyzeResponse,
+} from "../services/api";
 
 import {
-  getCases,
+  getCase,
   uploadEvidence,
-  getAnalysisStatus,
+  getCaseEvidence,
   analyzeEvidence,
   analyzeEvidenceForensic,
   getCaseIOCs,
   getCaseFindings,
-  getCaseSecuritySummary,
-  type AnalysisStatusResponse,
-  type IOCAnalyzeResponse,
-  type CaseIOCResponse,
-  type CaseFindingsResponse,
 } from "../services/api";
 
 import Loading from "../components/Loading";
@@ -101,7 +99,7 @@ const CaseDetails = () => {
   const { caseId } = useParams();
 
   const [selectedCase, setSelectedCase] =
-    useState<Case | null>(null);
+    useState<BackendCase | null>(null);
 
   const [evidence, setEvidence] =
     useState<Evidence[]>([]);
@@ -120,9 +118,6 @@ const CaseDetails = () => {
 
   const [uploadError, setUploadError] =
     useState("");
-
-  const [analysisStatus, setAnalysisStatus] =
-    useState<AnalysisStatusResponse | null>(null);
 
   /*
    * =========================================================
@@ -146,7 +141,7 @@ const CaseDetails = () => {
    */
 
   const [forensicAnalysis, setForensicAnalysis] =
-    useState<ForensicAnalysis | null>(null);
+    useState<ForensicAnalysisResponse | null>(null);
 
   const [analyzingForensic, setAnalyzingForensic] =
     useState(false);
@@ -161,15 +156,10 @@ const CaseDetails = () => {
    */
 
   const [caseIOCs, setCaseIOCs] =
-    useState<CaseIOCResponse | null>(null);
+    useState<CaseIOC[]>([]);
 
   const [caseFindings, setCaseFindings] =
-    useState<CaseFindingsResponse | null>(null);
-
-  const [securitySummary, setSecuritySummary] =
-    useState<Awaited<
-      ReturnType<typeof getCaseSecuritySummary>
-    > | null>(null);
+    useState<Finding[]>([]);
 
   const [securityLoading, setSecurityLoading] =
     useState(false);
@@ -184,54 +174,44 @@ const CaseDetails = () => {
    */
 
   const fetchCase = async () => {
+    if (!caseId) {
+      setError("Case ID is missing.");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError("");
 
-      const cases = await getCases();
-
-      const foundCase = cases.find(
-        (item) =>
-          String(item.id) ===
-          String(caseId)
-      );
-
-      if (!foundCase) {
-        setError("Case not found.");
-        return;
-      }
-
-      setSelectedCase({
-        id: String(foundCase.id),
-
-        title: foundCase.title,
-
-        description:
-          foundCase.description ||
-          "No description provided.",
-
-        status:
-          foundCase.status === "Active"
-            ? "Open"
-            : foundCase.status === "Closed"
-              ? "Closed"
-              : "In Progress",
-
-        created_at:
-          new Date()
-            .toISOString()
-            .split("T")[0],
-
-        evidence_count: 0,
-      });
+      const foundCase = await getCase(String(caseId));
+      setSelectedCase(foundCase);
     } catch (err) {
       console.error(err);
-
-      setError(
-        "Unable to load case details."
-      );
+      setError("Unable to load case details.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /*
+   * UPDATED:
+   * Return the refreshed evidence list so handleUpload()
+   * can obtain the real backend evidence ID.
+   */
+  const fetchEvidence = async (): Promise<Evidence[]> => {
+    if (!caseId) {
+      return [];
+    }
+
+    try {
+      const items = await getCaseEvidence(String(caseId));
+      setEvidence(items);
+      return items;
+    } catch (err) {
+      console.error("Unable to load evidence:", err);
+      setUploadError("Unable to load case evidence.");
+      return [];
     }
   };
 
@@ -250,21 +230,18 @@ const CaseDetails = () => {
       setSecurityLoading(true);
       setSecurityError("");
 
-      const [
-        iocs,
-        findings,
-        summary,
-      ] = await Promise.all([
+      const [iocs, findings] = await Promise.all([
         getCaseIOCs(String(caseId)),
         getCaseFindings(String(caseId)),
-        getCaseSecuritySummary(
-          String(caseId)
-        ),
       ]);
 
-      setCaseIOCs(iocs);
-      setCaseFindings(findings);
-      setSecuritySummary(summary);
+      setCaseIOCs(
+        Array.isArray(iocs) ? iocs : []
+      );
+
+      setCaseFindings(
+        Array.isArray(findings) ? findings : []
+      );
     } catch (err) {
       console.error(
         "Unable to retrieve case security data:",
@@ -281,6 +258,8 @@ const CaseDetails = () => {
 
   useEffect(() => {
     fetchCase();
+    fetchEvidence();
+    fetchSecurityData();
   }, [caseId]);
 
   /*
@@ -385,7 +364,6 @@ const CaseDetails = () => {
       setUploading(true);
 
       setUploadError("");
-      setAnalysisStatus(null);
 
       setIocAnalysis(null);
       setIocError("");
@@ -400,49 +378,43 @@ const CaseDetails = () => {
        * 1. Upload evidence
        */
 
-      const response =
-        await uploadEvidence(
-          String(caseId),
-          selectedFile
+      await uploadEvidence(
+        String(caseId),
+        selectedFile
+      );
+
+      /*
+       * 2. Refresh evidence from the backend
+       *
+       * The upload response does not reliably expose
+       * evidence_id. The backend evidence object uses
+       * `id` as the actual evidence identifier.
+       */
+      const updatedEvidence =
+        await fetchEvidence();
+
+      /*
+       * Find the evidence we just uploaded.
+       */
+      const uploadedEvidence =
+        updatedEvidence.find(
+          (item) =>
+            item.filename ===
+            fileForAnalysis.name
         );
 
       /*
-       * 2. Add evidence to UI
+       * Make sure we actually received the
+       * backend-generated evidence ID.
        */
+      if (!uploadedEvidence?.id) {
+        throw new Error(
+          "Uploaded evidence ID could not be determined."
+        );
+      }
 
-      const newEvidence: Evidence = {
-        id: String(
-          response.evidence_id
-        ),
-
-        filename:
-          response.filename,
-
-        file_type:
-          selectedFile.name
-            .split(".")
-            .pop()
-            ?.toUpperCase() ||
-          "FILE",
-
-        sha256: "Processing...",
-
-        status:
-          response.status ===
-          "processed"
-            ? "Processed"
-            : "Processing",
-
-        uploaded_at:
-          new Date()
-            .toISOString()
-            .split("T")[0],
-      };
-
-      setEvidence((current) => [
-        newEvidence,
-        ...current,
-      ]);
+      const evidenceId =
+        uploadedEvidence.id;
 
       setSelectedFile(null);
 
@@ -456,32 +428,12 @@ const CaseDetails = () => {
       }
 
       /*
-       * 3. Get analysis status
-       */
-
-      try {
-        const status =
-          await getAnalysisStatus(
-            String(
-              response.evidence_id
-            )
-          );
-
-        setAnalysisStatus(status);
-      } catch (statusError) {
-        console.error(
-          "Unable to retrieve analysis status:",
-          statusError
-        );
-      }
-
-      /*
        * 4. Forensic analysis
        */
 
       await handleForensicAnalysis(
         fileForAnalysis,
-        String(response.evidence_id)
+        evidenceId
       );
 
       /*
@@ -526,10 +478,12 @@ const CaseDetails = () => {
               case_id:
                 String(caseId),
 
+              /*
+               * UPDATED:
+               * Use the actual backend evidence ID.
+               */
               evidence_id:
-                String(
-                  response.evidence_id
-                ),
+                evidenceId,
 
               text,
 
@@ -624,11 +578,78 @@ const CaseDetails = () => {
     forensicAnalysis?.timeline_events ||
     [];
 
-  const securityIocs =
-    caseIOCs?.items || [];
+  const securityIocs = caseIOCs;
+  const securityFindings = caseFindings;
 
-  const securityFindings =
-    caseFindings?.items || [];
+  const worstSeverity =
+    securityIocs.reduce(
+      (worst, ioc) => {
+        const rank: Record<string, number> = {
+          low: 1,
+          medium: 2,
+          high: 3,
+          critical: 4,
+        };
+
+        return (rank[ioc.severity || "low"] || 0) >
+          (rank[worst] || 0)
+          ? ioc.severity || worst
+          : worst;
+      },
+      "low"
+    );
+
+  const hotIocs = securityIocs.filter(
+    (ioc) =>
+      (ioc.risk_score || 0) >= 70 ||
+      ["high", "critical"].includes(
+        (ioc.severity || "").toLowerCase()
+      )
+  ).length;
+
+  const securitySummary = {
+    ioc_count: securityIocs.length,
+    worst_severity: worstSeverity,
+    evidence_count: evidence.length,
+    forensic_findings: securityFindings.length,
+    forensic_flagged: securityFindings.filter(
+      (finding) =>
+        ["high", "critical"].includes(
+          (finding.severity || "").toLowerCase()
+        )
+    ).length,
+    hot_iocs: hotIocs,
+    verdict:
+      securityIocs.some(
+        (ioc) =>
+          (ioc.severity || "").toLowerCase() === "critical" ||
+          (ioc.risk_score || 0) >= 90
+      )
+        ? "Critical"
+        : securityIocs.some(
+            (ioc) =>
+              ["high", "critical"].includes(
+                (ioc.severity || "").toLowerCase()
+              ) ||
+              (ioc.risk_score || 0) >= 70
+          )
+          ? "High Risk"
+          : securityIocs.length > 0
+            ? "Review"
+            : "No IOCs",
+    by_level: securityIocs.reduce<Record<string, number>>(
+      (acc, ioc) => {
+        const level = (
+          ioc.severity ||
+          "unknown"
+        ).toLowerCase();
+
+        acc[level] = (acc[level] || 0) + 1;
+        return acc;
+      },
+      {}
+    ),
+  };
 
   /*
    * =========================================================
@@ -773,57 +794,6 @@ const CaseDetails = () => {
       </div>
 
       {/* =====================================================
-          ANALYSIS STATUS
-         ===================================================== */}
-
-      {analysisStatus && (
-        <div className="case-section">
-          <div className="section-header">
-            <div>
-              <h3>Analysis Status</h3>
-
-              <p>
-                Current processing status
-                for this evidence.
-              </p>
-            </div>
-          </div>
-
-          <div className="analysis-status-grid">
-            <div className="analysis-status-card">
-              <span>Hashing</span>
-
-              <strong>
-                {
-                  analysisStatus.hashing_status
-                }
-              </strong>
-            </div>
-
-            <div className="analysis-status-card">
-              <span>Metadata</span>
-
-              <strong>
-                {
-                  analysisStatus.metadata_status
-                }
-              </strong>
-            </div>
-
-            <div className="analysis-status-card">
-              <span>AI Analysis</span>
-
-              <strong>
-                {
-                  analysisStatus.ai_analysis_status
-                }
-              </strong>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
           EVIDENCE LIST
          ===================================================== */}
 
@@ -869,7 +839,7 @@ const CaseDetails = () => {
 
                     <div className="evidence-meta">
                       <span>
-                        {item.file_type}
+                        {item.file_type ?? "Unknown type"}
                       </span>
 
                       <span>
@@ -879,7 +849,9 @@ const CaseDetails = () => {
 
                       <span>
                         Uploaded:{" "}
-                        {item.uploaded_at}
+                        {item.uploaded_at
+                          ? new Date(item.uploaded_at).toLocaleString()
+                          : "Unknown"}
                       </span>
                     </div>
                   </div>
@@ -887,18 +859,15 @@ const CaseDetails = () => {
 
                 <div className="evidence-card-side">
                   <span
-                    className={`status-badge status-${item.status
+                    className={`status-badge status-${(item.status ?? "unknown")
                       .toLowerCase()
-                      .replace(
-                        " ",
-                        "-"
-                      )}`}
+                      .replace(" ", "-")}`}
                   >
-                    {item.status}
+                    {item.status ?? "Unknown"}
                   </span>
 
                   <span className="hash-value">
-                    {item.sha256}
+                    {item.sha256 ?? "Not calculated"}
                   </span>
                 </div>
               </div>
@@ -1432,7 +1401,7 @@ const CaseDetails = () => {
                       {iocAnalysis.iocs.map(
                         (ioc) => (
                           <tr
-                            key={`${ioc.dedupe_key}-${ioc.value_normalized}`}
+                            key={`${ioc.evidence_id || ioc.dedupe_key}-${ioc.value_normalized}`}
                           >
                             <td>
                               <span className="ioc-type">
@@ -1463,10 +1432,10 @@ const CaseDetails = () => {
                             </td>
 
                             <td>
-                              {ioc.mitre_ids
+                              {(ioc.mitre_ids ?? [])
                                 .length >
                               0
-                                ? ioc.mitre_ids.join(
+                                ? (ioc.mitre_ids ?? []).join(
                                     ", "
                                   )
                                 : "—"}
@@ -1740,7 +1709,8 @@ const CaseDetails = () => {
           </>
         )}
 
-        {!securitySummary &&
+        {securityIocs.length === 0 &&
+          securityFindings.length === 0 &&
           !securityLoading &&
           !securityError && (
             <div className="empty-state">
@@ -1749,10 +1719,9 @@ const CaseDetails = () => {
               </strong>
 
               <p>
-                Upload and analyze
-                evidence to populate
-                the case-level security
-                summary.
+                Upload and analyze evidence
+                to populate the case-level
+                security summary.
               </p>
             </div>
           )}
@@ -1795,99 +1764,55 @@ const CaseDetails = () => {
               (finding, index) => (
                 <div
                   className="ioc-detail-card"
-                  key={`${finding.ioc}-${index}`}
+                  key={`${finding.id || finding.evidence_id || "finding"}-${index}`}
                 >
                   <div className="ioc-detail-header">
                     <strong>
-                      {finding.ioc}
+                      {finding.title || "Security Finding"}
                     </strong>
 
                     <span
-                      className={`risk-badge risk-${finding.severity}`}
+                      className={`risk-badge risk-${(
+                        finding.severity || "unknown"
+                      ).toLowerCase()}`}
                     >
-                      {finding.severity.toUpperCase()}
+                      {(finding.severity || "UNKNOWN").toUpperCase()}
                     </span>
                   </div>
 
                   <div className="ioc-context">
-                    <span>
-                      Observation
-                    </span>
-
+                    <span>Description</span>
                     <p>
-                      {
-                        finding.observation
-                      }
-                    </p>
-                  </div>
-
-                  <div className="ioc-reasons">
-                    <span>
-                      Reason
-                    </span>
-
-                    <p>
-                      {finding.reason}
+                      {finding.description ||
+                        "No description provided."}
                     </p>
                   </div>
 
                   <div className="ioc-mitre">
-                    <span>
-                      Type
-                    </span>
-
+                    <span>Source</span>
                     <strong>
-                      {finding.type}
+                      {finding.source || "Unknown"}
                     </strong>
                   </div>
 
-                  {finding.mitre_ids
-                    .length > 0 && (
-                    <div className="ioc-mitre">
-                      <span>
-                        MITRE ATT&CK
-                      </span>
-
-                      <strong>
-                        {finding.mitre_ids.join(
-                          ", "
-                        )}
-                      </strong>
-                    </div>
-                  )}
-
                   <div className="evidence-meta">
-                    <span>
-                      Evidence ID:{" "}
-                      {
-                        finding.source
-                          .evidence_id
-                      }
-                    </span>
+                    {finding.evidence_id && (
+                      <span>
+                        Evidence ID: {finding.evidence_id}
+                      </span>
+                    )}
 
-                    <span>
-                      Source:{" "}
-                      {
-                        finding.source
-                          .source_type
-                      }
-                    </span>
+                    {finding.status && (
+                      <span>
+                        Status: {finding.status}
+                      </span>
+                    )}
 
-                    {finding.source
-                      .line_no !==
-                      undefined &&
-                      finding.source
-                        .line_no !==
-                        null && (
-                        <span>
-                          Line:{" "}
-                          {
-                            finding
-                              .source
-                              .line_no
-                          }
-                        </span>
-                      )}
+                    {finding.created_at && (
+                      <span>
+                        Created: {finding.created_at}
+                      </span>
+                    )}
                   </div>
                 </div>
               )
@@ -1950,7 +1875,7 @@ const CaseDetails = () => {
                 {securityIocs.map(
                   (ioc) => (
                     <tr
-                      key={`${ioc.dedupe_key}-${ioc.value_normalized}`}
+                      key={`${ioc.id || ioc.evidence_id || ioc.value}-${ioc.value}`}
                     >
                       <td>
                         <span className="ioc-type">
@@ -1961,16 +1886,16 @@ const CaseDetails = () => {
                       <td>
                         <strong>
                           {
-                            ioc.value_normalized
+                            ioc.normalized_value || ioc.value
                           }
                         </strong>
                       </td>
 
                       <td>
                         <span
-                          className={`risk-badge risk-${ioc.risk_level}`}
+                          className={`risk-badge risk-${ioc.severity || "unknown"}`}
                         >
-                          {ioc.risk_level.toUpperCase()}
+                          {ioc.severity || "unknown".toUpperCase()}
                         </span>
                       </td>
 
@@ -1983,11 +1908,8 @@ const CaseDetails = () => {
                       </td>
 
                       <td>
-                        {ioc.mitre_ids
-                          .length > 0
-                          ? ioc.mitre_ids.join(
-                              ", "
-                            )
+                        {(ioc.mitre_ids ?? []).length > 0
+                          ? (ioc.mitre_ids ?? []).join(", ")
                           : "—"}
                       </td>
                     </tr>

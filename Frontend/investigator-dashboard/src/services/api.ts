@@ -1,5 +1,11 @@
 import axios from "axios";
 
+/*
+ * =========================================================
+ * API CONFIGURATION
+ * =========================================================
+ */
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:8000";
@@ -11,12 +17,19 @@ const api = axios.create({
   },
 });
 
-// Attach JWT token to every authenticated request
+console.log("API BASE URL:", API_BASE_URL);
+
+/*
+ * Attach JWT token to every authenticated request.
+ */
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("access_token");
+  const token =
+    localStorage.getItem("access_token");
 
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers.Authorization =
+      `Bearer ${token}`;
   }
 
   return config;
@@ -24,7 +37,7 @@ api.interceptors.request.use((config) => {
 
 /*
  * =========================================================
- * Authentication
+ * AUTHENTICATION
  * =========================================================
  */
 
@@ -41,17 +54,18 @@ export interface LoginResponse {
 export const login = async (
   credentials: LoginRequest
 ): Promise<LoginResponse> => {
-  const response = await api.post<LoginResponse>(
-    "/auth/login",
-    credentials
-  );
+  const response =
+    await api.post<LoginResponse>(
+      "/auth/login",
+      credentials
+    );
 
   return response.data;
 };
 
 /*
  * =========================================================
- * Cases
+ * CASES
  * =========================================================
  */
 
@@ -60,6 +74,10 @@ export interface BackendCase {
   title: string;
   description: string | null;
   status: string;
+
+  created_at?: string;
+  updated_at?: string;
+  evidence_count?: number;
 }
 
 export interface CreateCaseRequest {
@@ -67,34 +85,129 @@ export interface CreateCaseRequest {
   description?: string;
 }
 
-export const getCases = async (): Promise<BackendCase[]> => {
-  const response = await api.get<BackendCase[]>("/cases/");
+export interface UpdateCaseRequest {
+  title?: string;
+  description?: string;
+  status?: string;
+}
+
+/*
+ * Get all cases
+ */
+
+export const getCases =
+  async (): Promise<BackendCase[]> => {
+    const response =
+      await api.get<BackendCase[]>(
+        "/cases"
+      );
+
+    return response.data;
+  };
+
+/*
+ * Get one case
+ */
+
+export const getCase = async (
+  caseId: string
+): Promise<BackendCase> => {
+  const response =
+    await api.get<BackendCase>(
+      `/cases/${caseId}`
+    );
+
   return response.data;
 };
+
+/*
+ * Create case
+ */
 
 export const createCase = async (
   caseData: CreateCaseRequest
 ): Promise<BackendCase> => {
-  const response = await api.post<BackendCase>(
-    "/cases/",
-    caseData
-  );
+  const response =
+    await api.post<BackendCase>(
+      "/cases",
+      caseData
+    );
+
+  return response.data;
+};
+
+/*
+ * Update case
+ */
+
+export const updateCase = async (
+  caseId: string,
+  caseData: UpdateCaseRequest
+): Promise<BackendCase> => {
+  const response =
+    await api.patch<BackendCase>(
+      `/cases/${caseId}`,
+      caseData
+    );
 
   return response.data;
 };
 
 /*
  * =========================================================
- * Evidence
+ * EVIDENCE
  * =========================================================
  */
+
+export interface Evidence {
+  id: string;
+  evidence_id?: string;
+
+  case_id: string;
+
+  filename: string;
+
+  status: string;
+
+  file_type?: string;
+
+  content_type?: string;
+
+  size?: number;
+
+  size_bytes?: number;
+
+  sha256?: string | null;
+
+  md5?: string | null;
+
+  uploaded_at?: string;
+
+  created_at?: string;
+
+  metadata?: Record<
+    string,
+    unknown
+  >;
+
+  [key: string]: unknown;
+}
 
 export interface EvidenceUploadResponse {
   evidence_id: string;
   filename: string;
   case_id: string;
   status: string;
+
+  [key: string]: unknown;
 }
+
+/*
+ * Upload evidence to a specific case.
+ *
+ * NEW BACKEND:
+ * POST /cases/{case_id}/evidence
+ */
 
 export const uploadEvidence = async (
   caseId: string,
@@ -102,16 +215,19 @@ export const uploadEvidence = async (
 ): Promise<EvidenceUploadResponse> => {
   const formData = new FormData();
 
-  formData.append("case_id", caseId);
-  formData.append("file", file);
+  formData.append(
+    "file",
+    file
+  );
 
   const response =
     await api.post<EvidenceUploadResponse>(
-      "/evidence/upload",
+      `/cases/${caseId}/evidence`,
       formData,
       {
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Content-Type":
+            "multipart/form-data",
         },
       }
     );
@@ -120,164 +236,144 @@ export const uploadEvidence = async (
 };
 
 /*
- * =========================================================
- * Evidence Analysis Status
- * =========================================================
+ * Get all evidence belonging to a case.
+ *
+ * NEW BACKEND:
+ * GET /cases/{case_id}/evidence
  */
 
-export interface AnalysisStatusResponse {
-  evidence_id: string;
-  hashing_status: string;
-  metadata_status: string;
-  ai_analysis_status: string;
-}
+export const getCaseEvidence =
+  async (
+    caseId: string
+  ): Promise<Evidence[]> => {
+    const response =
+      await api.get<Evidence[]>(
+        `/cases/${caseId}/evidence`
+      );
 
-export const getAnalysisStatus = async (
-  evidenceId: string
-): Promise<AnalysisStatusResponse> => {
-  const response =
-    await api.get<AnalysisStatusResponse>(
-      `/analysis/status/${evidenceId}`
-    );
-
-  return response.data;
-};
+    return response.data;
+  };
 
 /*
  * =========================================================
- * FORENSIC ANALYSIS
- *
- * IMPORTANT:
- * The current Forensic module is a Python engine
- * (Forensic/forensic_engine.py).
- *
- * It does NOT currently expose a FastAPI endpoint in
- * Backend/app.
- *
- * Therefore we keep the frontend connection point here,
- * but do not invent a backend endpoint.
- *
- * Set VITE_FORENSIC_ANALYZE_PATH once Intern-1 exposes it.
+ * FINDINGS
  * =========================================================
  */
 
-export interface ForensicHashResult {
-  md5?: string;
-  sha256?: string;
-  [key: string]: unknown;
-}
+export interface Finding {
+  id?: string;
 
-export interface ForensicClassification {
-  classification:
-    | "Normal"
-    | "Suspicious"
-    | "Critical"
-    | string;
-  reasons?: string[];
-  [key: string]: unknown;
-}
+  case_id: string;
 
-export interface ForensicFinding {
   evidence_id?: string;
-  case_id?: string;
+
+  title?: string;
+
+  description?: string;
+
+  severity?: string;
+
+  status?: string;
+
+  source?: string;
+
+  created_at?: string;
+
   [key: string]: unknown;
-}
-
-export interface ForensicAnalysisResponse {
-  evidence_id?: string;
-  case_id?: string;
-
-  hash?: ForensicHashResult;
-
-  file_identification?: Record<
-    string,
-    unknown
-  >;
-
-  filesystem_metadata?: Record<
-    string,
-    unknown
-  >;
-
-  exif?: Record<string, unknown> | null;
-
-  document_metadata?: Record<
-    string,
-    unknown
-  > | null;
-
-  pe_summary?: Record<
-    string,
-    unknown
-  > | null;
-
-  log_entries?: Array<
-    Record<string, unknown>
-  >;
-
-  timeline_events?: Array<
-    Record<string, unknown>
-  >;
-
-  classification?: ForensicClassification;
-
-  forensic_finding?: ForensicFinding;
-
-  backend_send_result?: Record<
-    string,
-    unknown
-  > | null;
-
-  processing_errors?: string[];
-
-  processed_at?: string;
 }
 
 /*
- * Backend connection point for the Forensic engine.
- *
- * Example .env once backend route exists:
- *
- * VITE_FORENSIC_ANALYZE_PATH=/api/v1/forensic/analyze
- *
- * Until that exists, this function intentionally tells us
- * that the backend route has not been connected yet.
+ * Get findings belonging to a case.
  */
 
-export const analyzeEvidenceForensic = async (
-  caseId: string,
-  evidenceId: string,
-  file: File
-): Promise<ForensicAnalysisResponse> => {
-  const forensicPath =
-    import.meta.env.VITE_FORENSIC_ANALYZE_PATH;
+export const getCaseFindings =
+  async (
+    caseId: string
+  ): Promise<Finding[]> => {
+    const response =
+      await api.get<Finding[]>(
+        `/cases/${caseId}/findings`
+      );
 
-  if (!forensicPath) {
-    throw new Error(
-      "Forensic backend endpoint is not configured. " +
-        "Set VITE_FORENSIC_ANALYZE_PATH in the frontend .env file."
-    );
-  }
+    return response.data;
+  };
 
-  const formData = new FormData();
+/*
+ * Add a finding to a case.
+ */
 
-  formData.append("case_id", caseId);
-  formData.append("evidence_id", evidenceId);
-  formData.append("file", file);
+export interface CreateFindingRequest {
+  evidence_id?: string;
+  title: string;
+  description: string;
+  severity?: string;
+  source?: string;
+}
 
-  const response =
-    await api.post<ForensicAnalysisResponse>(
-      forensicPath,
-      formData,
-      {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      }
-    );
+export const createFinding =
+  async (
+    caseId: string,
+    finding: CreateFindingRequest
+  ): Promise<Finding> => {
+    const response =
+      await api.post<Finding>(
+        `/cases/${caseId}/findings`,
+        finding
+      );
 
-  return response.data;
-};
+    return response.data;
+  };
+
+/*
+ * =========================================================
+ * CASE IOCs
+ * =========================================================
+ */
+
+export interface CaseIOC {
+  id?: string;
+
+  case_id: string;
+
+  evidence_id?: string;
+
+  type: string;
+
+  value: string;
+
+  normalized_value?: string;
+
+  severity?: string;
+
+  risk_score?: number;
+
+  status?: string;
+
+  mitre_ids?: string[];
+
+  context?: string;
+
+  [key: string]: unknown;
+}
+
+/*
+ * Get IOCs linked to a case.
+ *
+ * NEW BACKEND:
+ * GET /cases/{case_id}/iocs
+ */
+
+export const getCaseIOCs =
+  async (
+    caseId: string
+  ): Promise<CaseIOC[]> => {
+    const response =
+      await api.get<CaseIOC[]>(
+        `/cases/${caseId}/iocs`
+      );
+
+    return response.data;
+  };
 
 /*
  * =========================================================
@@ -305,8 +401,11 @@ export interface IOCAnalyzeRequest {
   tenant_id: string;
   case_id: string;
   evidence_id: string;
+
   text?: string | null;
+
   source_type: IOCSourceType;
+
   options?: IOCAnalyzeOptions;
 }
 
@@ -368,84 +467,6 @@ export interface IOCRecord {
   analysis_id?: string;
 }
 
-/*
- * Sprint-2 Threat Finding
- */
-
-export interface ThreatFindingSource {
-  case_id: string;
-  evidence_id: string;
-  source_type: string;
-  line_no?: number | null;
-}
-
-export interface ThreatFinding {
-  ioc: string;
-  type: string;
-  source: ThreatFindingSource;
-  severity: IOCRiskLevel;
-  timestamp: string;
-  reason: string;
-  observation: string;
-  risk_score: number;
-  mitre_ids: string[];
-}
-
-/*
- * Sprint-2 Correlation
- */
-
-export interface SharedIOC {
-  ioc: string;
-  type: string;
-  evidence_count: number;
-  max_severity: IOCRiskLevel;
-  note: string;
-}
-
-export interface ColocatedLink {
-  line_no: number;
-  iocs: string[];
-  note: string;
-}
-
-export interface CorrelationTimelineItem {
-  line_no?: number | null;
-  ioc: string;
-  type: string;
-  severity: IOCRiskLevel;
-}
-
-export interface CaseRollup {
-  ioc_count: number;
-  worst_severity: IOCRiskLevel;
-  by_level: Record<
-    IOCRiskLevel,
-    number
-  >;
-  forensic_findings: number;
-  forensic_flagged: number;
-  hot_iocs: number;
-  verdict: string;
-}
-
-export interface IOCCorrelations {
-  shared_iocs: SharedIOC[];
-  colocated_links: ColocatedLink[];
-  timeline: CorrelationTimelineItem[];
-  rollup: CaseRollup;
-}
-
-/*
- * IOC analysis response.
- *
- * findings and correlations are optional because the older
- * backend response did not contain them.
- *
- * This allows the frontend to work with both versions while
- * the backend integration is being completed.
- */
-
 export interface IOCAnalyzeResponse {
   analysis_id: string;
 
@@ -463,30 +484,32 @@ export interface IOCAnalyzeResponse {
 
   text_truncated: boolean;
 
-  counts: Record<string, number>;
+  counts: Record<
+    string,
+    number
+  >;
 
   iocs: IOCRecord[];
-
-  findings?: ThreatFinding[];
-
-  correlations?: IOCCorrelations;
 }
 
 /*
- * Run IOC analysis for one evidence file.
+ * NEW SECURITY ROUTER PREFIX
+ *
+ * /ioc/api/v1/iocs
  */
 
-export const analyzeEvidence = async (
-  request: IOCAnalyzeRequest
-): Promise<IOCAnalyzeResponse> => {
-  const response =
-    await api.post<IOCAnalyzeResponse>(
-      "/api/v1/iocs/analyze",
-      request
-    );
+export const analyzeEvidence =
+  async (
+    request: IOCAnalyzeRequest
+  ): Promise<IOCAnalyzeResponse> => {
+    const response =
+      await api.post<IOCAnalyzeResponse>(
+        "/ioc/api/v1/iocs/analyze",
+        request
+      );
 
-  return response.data;
-};
+    return response.data;
+  };
 
 /*
  * =========================================================
@@ -496,131 +519,162 @@ export const analyzeEvidence = async (
 
 export interface IOCListResponse {
   items: IOCRecord[];
+
   total: number;
+
   page: number;
+
   page_size: number;
 }
 
-export const getIOCs = async (
-  page = 1,
-  pageSize = 50
-): Promise<IOCListResponse> => {
-  const response =
-    await api.get<IOCListResponse>(
-      "/api/v1/iocs/",
-      {
-        params: {
-          page,
-          page_size: pageSize,
-        },
-      }
-    );
+export const getIOCs =
+  async (
+    page = 1,
+    pageSize = 50
+  ): Promise<IOCListResponse> => {
+    const response =
+      await api.get<IOCListResponse>(
+        "/ioc/api/v1/iocs/",
+        {
+          params: {
+            page,
+            page_size:
+              pageSize,
+          },
+        }
+      );
 
-  return response.data;
-};
+    return response.data;
+  };
 
 /*
  * =========================================================
- * CASE-LEVEL SECURITY DATA
- *
- * These endpoints are present in the updated Security
- * module and are intended to be mounted behind the main
- * backend/gateway.
+ * IOC HEALTH
  * =========================================================
  */
 
-export interface CaseIOCResponse {
-  case_id: string;
-  total: number;
-  items: IOCRecord[];
+export const getIOCHealth =
+  async (): Promise<{
+    status: string;
+  }> => {
+    const response =
+      await api.get<{
+        status: string;
+      }>(
+        "/ioc/api/v1/iocs/health"
+      );
+
+    return response.data;
+  };
+
+/*
+ * =========================================================
+ * FORENSIC ANALYSIS
+ * =========================================================
+ *
+ * The forensic engine is currently a Python engine.
+ * Keep this connection point until the backend exposes
+ * its HTTP endpoint.
+ * =========================================================
+ */
+
+export interface ForensicHashResult {
+  md5?: string;
+  sha256?: string;
+
+  [key: string]: unknown;
 }
 
-export const getCaseIOCs = async (
-  caseId: string,
-  level?: IOCRiskLevel
-): Promise<CaseIOCResponse> => {
-  const response =
-    await api.get<CaseIOCResponse>(
-      `/api/v1/iocs/by-case/${caseId}/iocs`,
-      {
-        params: level ? { level } : undefined,
-      }
-    );
+export interface ForensicClassification {
+  classification:
+    | "Normal"
+    | "Suspicious"
+    | "Critical"
+    | string;
 
-  return response.data;
-};
+  reasons?: string[];
 
-export interface CaseFindingsResponse {
-  case_id: string;
-  total: number;
-  items: ThreatFinding[];
+  [key: string]: unknown;
 }
 
-export const getCaseFindings = async (
-  caseId: string,
-  severity?: IOCRiskLevel
-): Promise<CaseFindingsResponse> => {
-  const response =
-    await api.get<CaseFindingsResponse>(
-      `/api/v1/iocs/by-case/${caseId}/findings`,
-      {
-        params: severity
-          ? { severity }
-          : undefined,
-      }
-    );
+export interface ForensicFinding {
+  evidence_id?: string;
 
-  return response.data;
-};
+  case_id?: string;
 
-export interface CaseSummaryResponse {
-  case_id: string;
-  evidence_count: number;
+  [key: string]: unknown;
+}
 
-  ioc_count: number;
+export interface ForensicAnalysisResponse {
+  evidence_id?: string;
 
-  worst_severity: IOCRiskLevel;
+  case_id?: string;
 
-  by_level: Record<
-    IOCRiskLevel,
-    number
+  hash?: ForensicHashResult;
+
+  file_identification?: Record<
+    string,
+    unknown
   >;
 
-  forensic_findings: number;
+  filesystem_metadata?: Record<
+    string,
+    unknown
+  >;
 
-  forensic_flagged: number;
+  exif?: Record<
+    string,
+    unknown
+  > | null;
 
-  hot_iocs: number;
+  document_metadata?: Record<
+    string,
+    unknown
+  > | null;
 
-  verdict: string;
+  pe_summary?: Record<
+    string,
+    unknown
+  > | null;
+
+  log_entries?: Array<
+    Record<string, unknown>
+  >;
+
+  timeline_events?: Array<
+    Record<string, unknown>
+  >;
+
+  classification?: ForensicClassification;
+
+  forensic_finding?: ForensicFinding;
+
+  backend_send_result?: Record<
+    string,
+    unknown
+  > | null;
+
+  processing_errors?: string[];
+
+  processed_at?: string;
 }
 
-export const getCaseSecuritySummary = async (
-  caseId: string
-): Promise<CaseSummaryResponse> => {
-  const response =
-    await api.get<CaseSummaryResponse>(
-      `/api/v1/iocs/by-case/${caseId}/summary`
-    );
+export const analyzeEvidenceForensic = async (
+  caseId: string,
+  evidenceId: string,
+  _file: File
+): Promise<ForensicAnalysisResponse> => {
+  const response = await api.post<ForensicAnalysisResponse>(
+    `/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}/forensic`
+  );
 
   return response.data;
 };
 
 /*
  * =========================================================
- * HEALTH
+ * DEFAULT EXPORT
  * =========================================================
  */
-
-export const getIOCHealth = async (): Promise<{
-  status: string;
-}> => {
-  const response =
-    await api.get<{ status: string }>(
-      "/api/v1/iocs/health"
-    );
-
-  return response.data;
-};
 
 export default api;

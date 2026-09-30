@@ -574,8 +574,6 @@ def analyze(request: IOCAnalyzeRequest) -> AnalyzeResponse:
     for r in records:
         counts[r.type] = counts.get(r.type, 0) + 1
 
-<<<<<<< HEAD
-=======
     # Stage 8 (Sprint-2): Threat Findings + correlation. Defensive: never fail
     # the analysis if findings/correlation break — return empty and continue.
     findings: list[dict] = []
@@ -592,7 +590,6 @@ def analyze(request: IOCAnalyzeRequest) -> AnalyzeResponse:
     except Exception:
         correlations = {}
 
->>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423
     return AnalyzeResponse(
         analysis_id=uuid.uuid4(),
         tenant_id=request.tenant_id,
@@ -604,9 +601,6 @@ def analyze(request: IOCAnalyzeRequest) -> AnalyzeResponse:
         text_truncated=text_truncated,
         counts=counts,
         iocs=records,
-<<<<<<< HEAD
-=======
         findings=findings,
         correlations=correlations,
->>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423
     )

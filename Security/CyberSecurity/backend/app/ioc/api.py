@@ -61,8 +61,6 @@ def list_iocs(
 def health() -> dict:
     """Liveness probe — no auth required."""
     return {"status": "ok"}
-<<<<<<< HEAD
-=======
 
 
 def _case_analyses(case_id: str) -> list[AnalyzeResponse]:
@@ -116,4 +114,3 @@ def case_summary(
     rollup = _corr.case_rollup(recs) if recs else {"ioc_count": 0, "verdict": "normal"}
     return {"case_id": case_id,
             "evidence_count": len(_case_analyses(case_id)), **rollup}
->>>>>>> 6cc0db3bd6a58ee1cde08412fc6c76bf75c42423
