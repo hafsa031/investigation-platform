@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.exceptions import global_exception_handler
 from app.routers import auth, cases
+from app.database import engine
+from app import models
 
 # Path resolution:
 # ROOT_DIR is "Investigation Platform"
@@ -18,6 +20,8 @@ sys.path.append(str(CYBERSECURITY_DIR))
 # Import teammate's IOC router
 from backend.app.ioc.api import router as ioc_router
 
+# Initialize database tables
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
