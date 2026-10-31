@@ -1,15 +1,18 @@
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
+from app.config import settings
 
-# Format: postgresql://username:password@localhost:5432/database_name
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:12186@localhost:5432/jagspire"
+# Creates the PostgreSQL database engine using your configuration settings
+engine = create_engine(settings.DATABASE_URL)
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+# Session factory for handling database transactions per request
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+# Base class for your SQLAlchemy models
 Base = declarative_base()
 
+# Dependency used in routers to get an active database session
 def get_db():
     db = SessionLocal()
     try:

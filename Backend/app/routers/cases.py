@@ -1,37 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 
 from app.database import get_db
 from app.models import CaseModel
+from app.schemas.case import CaseCreate, CaseResponse  # Adjust import path if schemas are in app/schemas.py
 
 router = APIRouter(prefix="/cases", tags=["Cases"])
 
-class CaseCreate(BaseModel):
-    id: str
-    title: str
-    description: Optional[str] = None
-
-class CaseResponse(BaseModel):
-    id: str
-    title: str
-    description: Optional[str] = None
-
-    class Config:
-        from_attributes = True
-
 @router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 def create_case(case_data: CaseCreate, db: Session = Depends(get_db)):
-    # Check if case ID already exists in PostgreSQL
-    existing_case = db.query(CaseModel).filter(CaseModel.id == case_data.id).first()
-    if existing_case:
-        raise HTTPException(status_code=400, detail="Case ID already exists")
-    
+    # Create the case instance with data matching the database model
     new_case = CaseModel(
-        id=case_data.id,
         title=case_data.title,
-        description=case_data.description
+        description=case_data.description,
+        created_by=case_data.created_by,
+        status="Open"  # Defaults to Open based on your enum
     )
     
     db.add(new_case)
