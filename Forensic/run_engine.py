@@ -6,6 +6,7 @@ Usage:
 """
 import sys
 from forensic_engine_final.service import EvidenceProcessingService
+from forensic_engine.service import EvidenceProcessingService
 
 # Tags that are binary blobs or vendor-specific noise; not useful in a report.
 SKIP_TAGS = {"MakerNote", "UserComment", "PrintImageMatching", "ComponentsConfiguration", "ExifOffset", "ExifInteroperabilityOffset", "GPSInfo"}

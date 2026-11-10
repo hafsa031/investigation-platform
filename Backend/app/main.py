@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -18,6 +19,27 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # Point sys.path to "Security/CyberSecurity" so Python can resolve "backend.app.ioc..."
 CYBERSECURITY_DIR = ROOT_DIR / "Security" / "CyberSecurity"
 sys.path.append(str(CYBERSECURITY_DIR))
+from app.core.exceptions import global_exception_handler
+from app.routers import auth, cases, evidence, entities, reports, events
+from app.database import engine
+from app import models
+
+# Explicitly import all 10 models so SQLAlchemy registers and creates them in PostgreSQL
+from app.models import (
+    UserModel,
+    CaseModel,
+    EvidenceModel,
+    EvidenceHashModel,
+    EventModel,
+    TimelineEventModel,
+    EntityModel,
+    RelationshipModel,
+    ReportModel,
+    AuditLogModel
+)
+
+# Initialize database tables for all 10 models in PostgreSQL
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -48,6 +70,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
 # 2. Cases, Evidence & Investigation Routers
+# Include All Feature Routers mapped to the ER Diagram
+app.include_router(auth.router)
 app.include_router(cases.router)
 app.include_router(evidence.router)
 app.include_router(entities.router)
@@ -87,3 +111,7 @@ def database_health():
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))
     return {"status": "ok", "database": "connected"}
+
+@app.get("/", tags=["Health Check"])
+async def root():
+    return {"message": "Jagspire AI Investigation Backend API is running with full 10-table PostgreSQL architecture."}

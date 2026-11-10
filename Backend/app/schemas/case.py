@@ -3,6 +3,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
 
 class CaseStatus(str, Enum):
     OPEN = "Open"
@@ -12,6 +13,9 @@ class CaseStatus(str, Enum):
 class CaseCreate(BaseModel):
     title: str = Field(min_length=2, max_length=200)
     description: str | None = None
+    title: str = Field(..., example="Suspicious Network Intrusion")
+    description: Optional[str] = Field(None, example="Investigating abnormal outgoing traffic")
+    created_by: UUID  # Required to link the case to the user in PostgreSQL
 
 class CaseUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=2, max_length=200)
@@ -19,22 +23,29 @@ class CaseUpdate(BaseModel):
     status: CaseStatus | None = None
 
 class CaseResponse(BaseModel):
-    id: str
+    id: UUID
     title: str
     description: Optional[str] = None
     status: CaseStatus
+    created_by: UUID
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
-# 3. Evidence Metadata Schema (Includes SHA-256, type, size, timestamp)
+    class Config:
+        from_attributes = True
+
+# 3. Evidence Metadata Schema
 class EvidenceMetadata(BaseModel):
-    id: str
-    case_id: str
+    id: UUID
+    case_id: UUID
     filename: str
     file_type: str
     sha256: str
     file_size_bytes: int
     uploaded_at: datetime
+
+    class Config:
+        from_attributes = True
 
 # 4. Finding Schemas
 class FindingCreate(BaseModel):
@@ -46,3 +57,9 @@ class FindingResponse(FindingCreate):
     id: str
     case_id: str
     created_at: datetime
+    id: UUID
+    case_id: UUID
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
