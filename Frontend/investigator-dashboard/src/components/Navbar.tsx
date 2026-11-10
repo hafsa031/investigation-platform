@@ -3,7 +3,7 @@ const Navbar = () => {
     <header className="navbar">
       <div>
         <h1>Investigator Dashboard</h1>
-        <p>AI Evidence Correlation & Digital Investigation Platform</p>
+        <p>Digital Investigation & Evidence Management Platform</p>
       </div>
 
       <div className="investigator">

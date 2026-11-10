@@ -1,9 +1,0 @@
-pydantic==2.12.5
-tldextract==5.3.0
-pytest
-pytest-cov
-pydantic>=2
-tldextract
-fastapi
-pytest
-pytest-cov

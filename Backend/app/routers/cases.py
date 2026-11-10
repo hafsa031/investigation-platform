@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 from fastapi import APIRouter, HTTPException, UploadFile, File, status
 from typing import List
 from datetime import datetime
@@ -8,9 +9,22 @@ from pathlib import Path
 
 FORENSIC_DIR = Path(__file__).resolve().parents[3] / "Forensic"
 sys.path.insert(0, str(FORENSIC_DIR))
+=======
+from uuid import UUID
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models import (CaseModel, EvidenceModel, UserModel, ForensicAnalysisModel, EvidenceHashModel,
+                        EventModel, TimelineEventModel, EntityModel, RelationshipModel, ReportModel)
+from app.config import settings
+from app.schemas.case import CaseCreate, CaseUpdate, CaseResponse
+from app.dependencies import get_current_user
+>>>>>>> Stashed changes
 
 from forensic_engine import process_evidence
 
+<<<<<<< Updated upstream
 from app.schemas.case import (
     CaseCreate,
     CaseUpdate,
@@ -287,3 +301,72 @@ async def list_case_iocs(case_id: str):
         "status": "active",
         "associated_iocs": []
     }
+=======
+def owned_case(case_id: UUID, user: UserModel, db: Session) -> CaseModel:
+    case = db.query(CaseModel).filter(CaseModel.id == case_id, CaseModel.created_by == user.id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return case
+
+@router.post("/", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
+def create_case(data: CaseCreate, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    case = CaseModel(title=data.title, description=data.description, created_by=user.id, status="open")
+    db.add(case); db.commit(); db.refresh(case)
+    return case
+
+@router.get("/", response_model=list[CaseResponse])
+def list_cases(db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    return db.query(CaseModel).filter(CaseModel.created_by == user.id).order_by(CaseModel.created_at.desc()).all()
+
+@router.get("/{case_id}", response_model=CaseResponse)
+def get_case(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    return owned_case(case_id, user, db)
+
+@router.patch("/{case_id}", response_model=CaseResponse)
+def update_case(case_id: UUID, data: CaseUpdate, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    case = owned_case(case_id, user, db)
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(case, key, value.value if hasattr(value, "value") else value)
+    db.commit(); db.refresh(case)
+    return case
+
+@router.delete("/{case_id}")
+def delete_case(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    case = owned_case(case_id, user, db)
+    evidence_rows = db.query(EvidenceModel).filter(EvidenceModel.case_id == case_id).all()
+    evidence_ids = [item.id for item in evidence_rows]
+    # Remove dependent rows explicitly so this also works with existing PostgreSQL constraints.
+    db.query(TimelineEventModel).filter(TimelineEventModel.case_id == case_id).delete(synchronize_session=False)
+    db.query(EventModel).filter(EventModel.case_id == case_id).delete(synchronize_session=False)
+    db.query(RelationshipModel).filter(RelationshipModel.case_id == case_id).delete(synchronize_session=False)
+    db.query(EntityModel).filter(EntityModel.case_id == case_id).delete(synchronize_session=False)
+    db.query(ForensicAnalysisModel).filter(ForensicAnalysisModel.case_id == case_id).delete(synchronize_session=False)
+    if evidence_ids:
+        db.query(EvidenceHashModel).filter(EvidenceHashModel.evidence_id.in_(evidence_ids)).delete(synchronize_session=False)
+        db.query(EvidenceModel).filter(EvidenceModel.id.in_(evidence_ids)).delete(synchronize_session=False)
+    db.query(ReportModel).filter(ReportModel.case_id == case_id).delete(synchronize_session=False)
+    db.delete(case); db.commit()
+    # Stored evidence is kept outside the database; remove this case's storage folder after commit.
+    storage_path = (settings.STORAGE_DIR / str(case_id)).resolve()
+    if settings.STORAGE_DIR == storage_path.parent and storage_path.is_dir():
+        import shutil
+        shutil.rmtree(storage_path, ignore_errors=True)
+    return {"message": "Case and related records successfully deleted"}
+
+@router.get("/{case_id}/stats")
+def case_stats(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    owned_case(case_id, user, db)
+    return {"case_id": str(case_id), "evidence_count": db.query(EvidenceModel).filter(EvidenceModel.case_id == case_id).count()}
+
+@router.get("/{case_id}/findings")
+def list_case_findings(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    owned_case(case_id, user, db)
+    analyses = db.query(ForensicAnalysisModel).filter(ForensicAnalysisModel.case_id == case_id).order_by(ForensicAnalysisModel.created_at.desc()).all()
+    findings = []
+    for analysis in analyses:
+        finding = (analysis.result or {}).get("forensic_finding") or {}
+        if finding:
+            findings.append({"id": str(analysis.id), **finding, "classification": analysis.classification,
+                             "created_at": analysis.created_at.isoformat() if analysis.created_at else None})
+    return findings
+>>>>>>> Stashed changes
