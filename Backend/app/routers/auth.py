@@ -1,17 +1,3 @@
-<<<<<<< Updated upstream
-from fastapi import APIRouter, HTTPException, status
-from app.schemas.auth import UserLogin, Token
-from app.core.security import create_access_token
-
-router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-@router.post("/login", response_model=Token)
-async def login(credentials: UserLogin):
-    if credentials.username == "investigator" and credentials.password == "password123":
-        token = create_access_token(data={"sub": credentials.username})
-        return {"access_token": token, "token_type": "bearer"}
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid username or password")
-=======
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,7 +12,7 @@ from app.models import UserModel
 from app.core.security import get_password_hash, verify_password, create_access_token
 from app.dependencies import get_current_user
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -86,7 +72,6 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
     user = db.query(UserModel).filter(UserModel.email == str(payload.email).lower()).first()
     if not user:
         return {"message": "If the email exists, a password reset token has been generated."}
-    # Demo workflow: token is returned to the caller. Production deployments should email it instead.
     return {"message": "Password reset token generated successfully.", "reset_token": create_password_reset_token(user.email)}
 
 @router.post("/reset-password")
@@ -100,4 +85,3 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"message": "Password has been successfully reset. You can now log in."}
->>>>>>> Stashed changes
