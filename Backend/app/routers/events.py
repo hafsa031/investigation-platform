@@ -35,3 +35,22 @@ def create_timeline_item(data: TimelineEventCreate, db: Session = Depends(get_db
 def list_timeline(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
     check_case(case_id, user, db)
     return db.query(TimelineEventModel).filter(TimelineEventModel.case_id == case_id).order_by(TimelineEventModel.timestamp.asc()).all()
+
+@router.get("/findings/{case_id}")
+def list_case_findings(case_id: UUID, db: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
+    check_case(case_id, user, db)
+    findings = db.query(EventModel).filter(
+        EventModel.case_id == case_id,
+        EventModel.event_type.in_(["forensic_finding", "file_system", "forensic"])
+    ).order_by(EventModel.occurred_at.desc()).all()
+    
+    return [
+        {
+            "id": f.id,
+            "title": f.description[:50] if f.description else "Forensic Finding",
+            "description": f.description,
+            "severity": "Info",
+            "timestamp": f.occurred_at
+        }
+        for f in findings
+    ]

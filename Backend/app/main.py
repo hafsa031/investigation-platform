@@ -1,13 +1,15 @@
 import sys
 from pathlib import Path
-from fastapi import FastAPI
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 from app.config import settings
-#from app.core.exceptions import global_exception_handler
-from app.routers import auth, cases
+from app.database import engine, get_db
+from app.dependencies import get_current_user
+from app import models
+from app.routers import auth, cases, evidence, entities, reports, events, audit
 
 # Path resolution:
 # ROOT_DIR is "Investigation Platform"
@@ -16,13 +18,6 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 # Point sys.path to "Security/CyberSecurity" so Python can resolve "backend.app.ioc..."
 CYBERSECURITY_DIR = ROOT_DIR / "Security" / "CyberSecurity"
 sys.path.append(str(CYBERSECURITY_DIR))
-
-# Import teammate's IOC router
-#from backend.app.ioc.api import router as ioc_router
-
-from app.database import engine
-from app import models
-from app.routers import auth, cases, evidence, entities, reports, events, audit
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -52,22 +47,36 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # 1. Auth Router
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 
-# 2. Cases, Evidence & Investigation Router
+# 2. Cases, Evidence & Investigation Routers
 app.include_router(cases.router)
-
-# 3. Integrated IOC Threat Analysis Router
-# Clean inclusion (uses the router's existing tag):
-#app.include_router(ioc_router, prefix="/ioc")
-
-
-@app.get("/", tags=["Health Check"])
-async def root():
-    return {"message": "Jagspire AI Investigation Backend API is running."}
 app.include_router(evidence.router)
 app.include_router(entities.router)
 app.include_router(reports.router)
 app.include_router(events.router)
 app.include_router(audit.router)
+
+# 3. Direct Global Findings Endpoint for Frontend UI Compatibility
+@app.get("/cases/{case_id}/findings", tags=["Findings"])
+def get_global_case_findings(case_id: str, db: Session = Depends(get_db), user = Depends(get_current_user)):
+    case = db.query(models.CaseModel).filter(models.CaseModel.id == case_id, models.CaseModel.created_by == user.id).first()
+    if not case:
+        return []
+    
+    findings = db.query(models.EventModel).filter(
+        models.EventModel.case_id == case_id,
+        models.EventModel.event_type.in_(["forensic_finding", "file_system", "forensic"])
+    ).order_by(models.EventModel.occurred_at.desc()).all()
+    
+    return [
+        {
+            "id": str(f.id),
+            "title": f.description[:50] if f.description else "Forensic Finding",
+            "description": f.description,
+            "severity": "Info",
+            "timestamp": f.occurred_at
+        }
+        for f in findings
+    ]
 
 @app.get("/", tags=["Health"])
 def health():
