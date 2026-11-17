@@ -1,0 +1,24 @@
+{
+    "sqltools.connections": [
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": true
+                },
+                "connectionTimeoutMillis": 15000,
+                "idleTimeoutMillis": 10000,
+                "max": 2
+            },
+            "ssh": "Disabled",
+            "previewLimit": 100,
+            "server": "dpg-dbg4v94ipgvc73ehjbd0-a.singapore-postgres.render.com",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "jagspire",
+            "database": "jagspire_internship",
+            "username": "jagspire_internship_user",
+            "connectionTimeout": 15,
+            "password": "BNGGCP5LbqQZ8924XgeKu0TkqL3DHIo4"
+        }
+    ]
+}

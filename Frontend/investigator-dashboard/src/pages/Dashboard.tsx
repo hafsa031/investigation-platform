@@ -46,7 +46,7 @@ const Dashboard = () => {
   ).length;
 
   const inProgressCases = mockCases.filter(
-    (item) => item.status === "In Progress"
+    (item) => item.status === "Under Investigation"
   ).length;
 
   const totalEvidence = mockCases.reduce(
@@ -88,7 +88,7 @@ const Dashboard = () => {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">In Progress</span>
+          <span className="stat-label">Under Investigation</span>
           <strong>{inProgressCases}</strong>
           <span className="stat-description">
             Active investigations
@@ -169,7 +169,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { Case } from "../types";
-import { getCases } from "../services/api";
+import { getCases, getCaseEvidence } from "../services/api";
 
 import Loading from "../components/Loading";
 import ErrorMessage from "../components/ErrorMessage";
@@ -188,19 +188,16 @@ const Dashboard = () => {
 
       const backendCases = await getCases();
 
-      const formattedCases: Case[] = backendCases.map((item) => ({
-        id: String(item.id),
-        title: item.title,
-        description:
-          item.description || "No description provided.",
-        status:
-          item.status === "Active"
-            ? "Open"
-            : item.status === "Closed"
-              ? "Closed"
-              : "In Progress",
-        created_at: new Date().toISOString().split("T")[0],
-        evidence_count: 0,
+      const formattedCases: Case[] = await Promise.all(backendCases.map(async (item) => {
+        const evidence = await getCaseEvidence(item.id);
+        return {
+          id: String(item.id),
+          title: item.title,
+          description: item.description || "No description provided.",
+          status: item.status === "Open" ? "Open" : item.status === "Closed" ? "Closed" : "Under Investigation",
+          created_at: item.created_at ? new Date(item.created_at).toLocaleDateString() : "—",
+          evidence_count: evidence.length,
+        };
       }));
 
       setCases(formattedCases);
@@ -213,6 +210,7 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCases();
   }, []);
 
@@ -223,7 +221,7 @@ const Dashboard = () => {
   ).length;
 
   const inProgressCases = cases.filter(
-    (item) => item.status === "In Progress"
+    (item) => item.status === "Under Investigation"
   ).length;
 
   const totalEvidence = cases.reduce(
@@ -286,7 +284,7 @@ const Dashboard = () => {
         </div>
 
         <div className="stat-card">
-          <span className="stat-label">In Progress</span>
+          <span className="stat-label">Under Investigation</span>
           <strong>{inProgressCases}</strong>
           <span className="stat-description">
             Active investigations

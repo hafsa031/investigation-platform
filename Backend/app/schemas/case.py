@@ -1,25 +1,26 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
-from enum import Enum
+from typing import Optional
 from datetime import datetime
+from enum import Enum
+from uuid import UUID
+from pydantic import BaseModel, ConfigDict, Field
 from uuid import UUID
 
-# 1. Restrict case status according to requirements
 class CaseStatus(str, Enum):
     OPEN = "Open"
     UNDER_INVESTIGATION = "Under Investigation"
     CLOSED = "Closed"
 
-# 2. Case Schemas
 class CaseCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=200)
+    description: str | None = None
     title: str = Field(..., example="Suspicious Network Intrusion")
     description: Optional[str] = Field(None, example="Investigating abnormal outgoing traffic")
     created_by: UUID  # Required to link the case to the user in PostgreSQL
 
 class CaseUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[CaseStatus] = None
+    title: str | None = Field(default=None, min_length=2, max_length=200)
+    description: str | None = None
+    status: CaseStatus | None = None
 
 class CaseResponse(BaseModel):
     id: UUID
@@ -53,6 +54,9 @@ class FindingCreate(BaseModel):
     details: Optional[str] = Field(None, example="Login originated from untrusted IP block")
 
 class FindingResponse(FindingCreate):
+    id: str
+    case_id: str
+    created_at: datetime
     id: UUID
     case_id: UUID
     created_at: datetime

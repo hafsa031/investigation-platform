@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Cases from "./pages/Cases";
 import CaseDetails from "./pages/CaseDetails";
 import Account from "./pages/Account";
+import EvidenceExplorer from "./pages/EvidenceExplorer";
 
 const App = () => {
   return (
@@ -50,6 +51,8 @@ const App = () => {
                       path="/cases/:caseId"
                       element={<CaseDetails />}
                     />
+
+                    <Route path="/evidence" element={<EvidenceExplorer />} />
 
                     <Route
                       path="/account"

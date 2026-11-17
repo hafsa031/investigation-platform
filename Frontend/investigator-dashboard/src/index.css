@@ -2342,3 +2342,54 @@ button {
     width: 100%;
   }
 }
+/* Case detail additions: retain the existing dark JAGSPIRE palette. */
+.case-tabs { display:flex; gap:8px; flex-wrap:wrap; margin:26px 0 18px; border-bottom:1px solid #1b2330; padding-bottom:12px; }
+.case-tab { border:1px solid #252e3b; background:#0d1119; color:#8d98a9; border-radius:7px; padding:10px 13px; font-size:13px; }
+.case-tab:hover, .case-tab.active { color:#fff; background:#1b2432; border-color:#344255; }
+.case-panel { background:#0d1119; border:1px solid #1b2330; border-radius:10px; padding:22px; margin-bottom:24px; }
+.case-notice { margin:14px 0; padding:12px 14px; color:#b9c7d8; background:#111c29; border:1px solid #26394e; border-radius:7px; font-size:13px; }
+.case-detail-stats { margin-top:22px; }
+.evidence-upload-form { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:16px; margin:16px 0 22px; border:1px dashed #344255; border-radius:8px; background:#0a0e15; }
+.evidence-upload-form input { color:#9aa6b7; flex:1; min-width:220px; }
+.evidence-actions { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+.evidence-row { gap:14px; }
+.analysis-result { border:1px solid #202a38; border-radius:8px; padding:16px; margin:16px 0; background:#0a0e15; }
+.analysis-result h4 { margin-bottom:8px; font-size:14px; color:#e8edf5; }
+.analysis-complete { color:#43d17b !important; font-size:12px; margin-bottom:14px; }
+.analysis-block { margin-top:14px; }
+.analysis-block h5, .subsection-title { color:#aab6c7; text-transform:capitalize; font-size:13px; margin:16px 0 8px; }
+.analysis-block pre { white-space:pre-wrap; overflow-wrap:anywhere; color:#aeb9c8; background:#080b11; border:1px solid #1b2330; border-radius:6px; padding:12px; font-size:12px; max-height:360px; overflow:auto; }
+.simple-record { border:1px solid #202a38; background:#0a0e15; border-radius:7px; padding:14px; margin:10px 0; }
+.simple-record strong { color:#e8edf5; font-size:13px; }
+.simple-record p { margin:6px 0; font-size:12px; overflow-wrap:anywhere; }
+.simple-record span, .muted-copy { color:#778396; font-size:11px; }
+.timeline-record { display:flex; gap:14px; padding:14px 4px; border-bottom:1px solid #1b2330; }
+.timeline-dot { width:9px; height:9px; flex:none; margin-top:5px; border-radius:50%; background:#9aa8bb; box-shadow:0 0 0 4px #1b2432; }
+.timeline-record strong { font-size:13px; color:#e8edf5; }
+.timeline-record p { margin:5px 0; font-size:12px; }
+.timeline-record span:last-child { color:#718095; font-size:11px; }
+.report-create-form { display:grid; gap:10px; margin:16px 0 22px; }
+.report-create-form input, .report-create-form textarea { width:100%; padding:11px 12px; color:#e8edf5; background:#080b11; border:1px solid #293342; border-radius:7px; }
+.report-create-form textarea { resize:vertical; }
+@media (max-width: 760px) { .case-panel { padding:15px; } .case-tab { flex:1 1 auto; } .evidence-actions { margin-left:0; width:100%; } }
+
+/* Functional form and account additions, using the existing JAGSPIRE palette. */
+.auth-switch { display:flex; justify-content:center; align-items:center; gap:7px; margin-top:18px; color:#7f8a9b; font-size:12px; }
+.report-create-form select, .report-create-form input[type="datetime-local"], .report-create-form input[type="file"], .report-create-form textarea, .report-create-form input:not([type="range"]) { font:inherit; }
+.report-create-form select, .report-create-form input[type="datetime-local"], .report-create-form input[type="file"], .report-create-form textarea, .report-create-form input:not([type="range"]) { width:100%; padding:11px 12px; color:#e8edf5; background:#080b11; border:1px solid #293342; border-radius:7px; }
+.report-create-form select option { background:#0d1119; color:#e8edf5; }
+.report-create-form input[type="file"] { padding:9px; }
+.report-create-form input[type="range"] { display:block; width:100%; margin-top:9px; accent-color:#e8edf5; }
+.report-create-form textarea { resize:vertical; }
+.form-label { display:grid; gap:8px; color:#9aa6b7; font-size:12px; }
+.danger-zone { border-top:1px solid #38232a; margin-top:28px; padding-top:20px; }
+.danger-zone h4 { color:#e8a1a9; font-size:14px; margin-bottom:7px; }
+.danger-zone p { font-size:12px; margin-bottom:13px; }
+.danger-button { padding:10px 14px; border:1px solid #713c47; background:#29171d; color:#f0aab3; border-radius:7px; }
+.danger-button:hover { background:#3a1d25; }
+.danger-button:disabled { opacity:.55; cursor:not-allowed; }
+.hash-value { overflow-wrap:anywhere; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+.report-create-form .subsection-title { margin:5px 0; }
+@media (max-width:760px) { .auth-switch { flex-wrap:wrap; } }
+.audit-list { max-height:520px; overflow:auto; }
+.audit-list pre { margin-top:8px; white-space:pre-wrap; overflow-wrap:anywhere; color:#8794a6; font-size:11px; }

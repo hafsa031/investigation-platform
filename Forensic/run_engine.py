@@ -5,6 +5,7 @@ Usage:
     py run_engine.py "<file path>" report.txt # also saves it to a text file
 """
 import sys
+from forensic_engine_final.service import EvidenceProcessingService
 from forensic_engine.service import EvidenceProcessingService
 
 # Tags that are binary blobs or vendor-specific noise; not useful in a report.

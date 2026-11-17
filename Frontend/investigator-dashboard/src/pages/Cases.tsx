@@ -4,26 +4,26 @@ import { useNavigate } from "react-router-dom";
 import type { Case } from "../types";
 import {
   createCase,
+  createAuditLog,
   getCases,
+  getCaseEvidence,
   type BackendCase,
 } from "../services/api";
 
 import Loading from "../components/Loading";
 import ErrorMessage from "../components/ErrorMessage";
 
-const formatCase = (item: BackendCase): Case => ({
-  id: String(item.id),
-  title: item.title,
-  description: item.description || "No description provided.",
-  status:
-    item.status === "Active"
-      ? "Open"
-      : item.status === "Closed"
-        ? "Closed"
-        : "In Progress",
-  created_at: new Date().toISOString().split("T")[0],
-  evidence_count: 0,
-});
+const formatCase = async (item: BackendCase): Promise<Case> => {
+  const evidence = await getCaseEvidence(item.id);
+  return {
+    id: String(item.id),
+    title: item.title,
+    description: item.description || "No description provided.",
+    status: item.status === "Open" ? "Open" : item.status === "Closed" ? "Closed" : "Under Investigation",
+    created_at: item.created_at ? new Date(item.created_at).toLocaleDateString() : "—",
+    evidence_count: evidence.length,
+  };
+};
 
 const Cases = () => {
   const navigate = useNavigate();
@@ -50,7 +50,7 @@ const Cases = () => {
 
       const backendCases = await getCases();
 
-      setCases(backendCases.map(formatCase));
+      setCases(await Promise.all(backendCases.map(formatCase)));
     } catch (err) {
       console.error(err);
       setError("Unable to load cases from the backend.");
@@ -60,6 +60,7 @@ const Cases = () => {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCases();
   }, []);
 
@@ -99,7 +100,8 @@ const Cases = () => {
           newDescription.trim() || undefined,
       });
 
-      const formattedCase = formatCase(created);
+      const formattedCase = await formatCase(created);
+      try { await createAuditLog({ action: "Case created", resource_type: "case", resource_id: created.id, details: { title: created.title } }); } catch (auditError) { console.warn("Audit log could not be saved", auditError); }
 
       setCases((current) => [
         formattedCase,
@@ -183,9 +185,7 @@ const Cases = () => {
         >
           <option value="All">All statuses</option>
           <option value="Open">Open</option>
-          <option value="In Progress">
-            In Progress
-          </option>
+          <option value="Under Investigation">Under Investigation</option>
           <option value="Closed">Closed</option>
         </select>
       </div>
